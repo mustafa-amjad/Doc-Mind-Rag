@@ -1,0 +1,5 @@
+[
+  {"question": "How many days do I have to return an item?", "must_contain": "30 days"},
+  {"question": "Which payment methods are accepted?", "must_contain": "PayPal"},
+  {"question": "When is the support team available?", "expected_page": 2}
+]
