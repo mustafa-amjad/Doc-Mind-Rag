@@ -1,0 +1,12 @@
+services:
+  docmind:
+    build: .
+    ports:
+      - "8501:8501"
+    env_file: .env
+    volumes:
+      - docmind-data:/app/data   # accounts, chats and indexes survive restarts
+    restart: unless-stopped
+
+volumes:
+  docmind-data:
