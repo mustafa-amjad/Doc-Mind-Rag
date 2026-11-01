@@ -1,0 +1,241 @@
+# 📄 DocMind RAG
+
+**Chat with your PDFs. Get answers with page-level citations. Your chats are saved.**
+A production-style Retrieval-Augmented Generation (RAG) app with **hybrid search (BM25 + vector)**, **FAISS HNSW indexing**, **cross-encoder re-ranking**, **chat memory**, **user accounts**, and **saved / pinned chats**. Powered by **Groq (Llama 3.3 70B)** and **Streamlit**.
+
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+![Streamlit](https://img.shields.io/badge/UI-Streamlit-ff4b4b)
+![FAISS](https://img.shields.io/badge/Vector%20DB-FAISS-0b5fff)
+![License](https://img.shields.io/badge/License-MIT-green)
+
+<!-- Add a screenshot or GIF here: ![Demo](assets/demo.gif) -->
+
+---
+
+## 🎯 The Problem
+
+LLMs don't know your private documents, and basic "embed and search" RAG often fails:
+- It misses exact terms like IDs, names, and error codes.
+- The right chunk is found but ranked 7th, so the LLM never sees it.
+- Follow-up questions like "and for gift cards?" lose their meaning.
+- Answers come with no proof of where they came from.
+- Every refresh throws away your work.
+
+## ✅ The Solution
+
+| Problem | Technique used |
+|---|---|
+| Misses exact keywords | **Hybrid search**: BM25 + vector, merged with Reciprocal Rank Fusion |
+| Right chunk ranked too low | **Cross-encoder re-ranking** |
+| Slow search on big data | **FAISS HNSW** index (auto-switches to exact Flat for small data) |
+| Hallucinations | Strict "use only the context" prompt + numbered citations `[1] [2]` |
+| Follow-up questions fail | **Chat memory**: the question is rewritten to a standalone one before searching |
+| Work lost on refresh | **Accounts + SQLite**: chats, pins and document indexes are saved |
+| Can't tell what helps | **UI toggles** to turn hybrid, re-ranking and memory on/off |
+| Long, noisy sources | **Compact evidence**: page chips + collapsed, shortened passages |
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart LR
+    A[PDF upload] --> B[Loader<br/>pypdf]
+    B --> C[Chunker<br/>recursive + overlap]
+    C --> D[Embedder<br/>MiniLM 384-dim]
+    D --> E[(FAISS<br/>Flat / HNSW)]
+    C --> F[(BM25<br/>keyword index)]
+    D --> S[(Saved per chat<br/>chunks + vectors)]
+    Q[User question] --> M[Chat memory<br/>rewrite follow-ups]
+    M --> G[Embed question]
+    G --> E
+    M --> F
+    E --> H[RRF fusion]
+    F --> H
+    H --> I[Cross-encoder<br/>re-ranker]
+    I --> J[Groq LLM<br/>Llama 3.3 70B]
+    J --> K[Answer + page citations]
+    K --> DB[(SQLite<br/>users, chats, messages)]
+```
+
+## ✨ Features
+
+**Retrieval**
+- Hybrid search (BM25 + vectors) with RRF, optional cross-encoder re-ranking
+- Flat or HNSW index chosen automatically by corpus size
+- Adjustable number of passages sent to the AI
+
+**Chats and accounts**
+- Sign up / log in (passwords stored as salted PBKDF2 hashes, never in plain text)
+- **New chat**, **Recent chats**, **Pinned chats**, one-click switching, rename, delete (with confirmation)
+- Each chat keeps its own documents. Reopen an old chat and keep asking. No re-upload, no re-embedding
+- Add more PDFs to a chat or replace them
+- Chat memory understands follow-up questions and shows "Understood as: ..."
+- Users can only see their own chats (every query is scoped by user id)
+
+**Interface**
+- Dark professional theme (`assets/style.css`), guided onboarding, one-click starter questions
+- Source chips (file · page), collapsed evidence, speed badge on every answer
+- Export any chat to Markdown
+
+## 🧰 Tech Stack
+
+| Layer | Tool |
+|---|---|
+| UI | Streamlit + custom CSS |
+| Storage | SQLite (stdlib) + files on disk |
+| PDF parsing | pypdf |
+| Chunking | LangChain `RecursiveCharacterTextSplitter` |
+| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` |
+| Vector search | FAISS (Flat + HNSW) |
+| Keyword search | `rank-bm25` |
+| Re-ranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
+| LLM | Groq, `llama-3.3-70b-versatile` |
+| Tests | pytest |
+
+## 📁 Project Structure
+
+```
+docmind-rag/
+├── app.py                  # Streamlit UI (entry point)
+├── docmind/                # core package
+│   ├── config.py           # all settings in one place
+│   ├── db.py               # SQLite: users, chats, messages
+│   ├── auth.py             # sign up / log in (PBKDF2)
+│   ├── loader.py           # PDF -> pages
+│   ├── chunker.py          # pages -> chunks
+│   ├── embedder.py         # text -> vectors
+│   ├── vector_store.py     # FAISS Flat / HNSW
+│   ├── keyword_search.py   # BM25
+│   ├── hybrid.py           # Reciprocal Rank Fusion
+│   ├── reranker.py         # cross-encoder
+│   ├── llm.py              # question rewrite + answer generation
+│   └── pipeline.py         # connects everything, save / load
+├── scripts/evaluate.py     # Hit@k and MRR for 4 retrieval setups
+├── eval/                   # example test questions
+├── tests/                  # unit tests
+├── data/                   # saved accounts, chats, indexes (git-ignored)
+├── assets/                 # style.css + screenshots / demo GIF
+├── .streamlit/config.toml  # dark theme + upload limit
+├── .vscode/                # VS Code run + test config
+├── Dockerfile  docker-compose.yml  .dockerignore
+├── NOTICE  THIRD_PARTY_LICENSES.md  LICENSE
+├── .env.example  requirements.txt
+└── README.md
+```
+
+## 🚀 Quick Start
+
+```bash
+git clone https://github.com/YOUR_USERNAME/docmind-rag.git
+cd docmind-rag
+
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+cp .env.example .env             # Windows: copy .env.example .env
+# open .env and paste GROQ_API_KEY (free key: https://console.groq.com)
+
+streamlit run app.py
+```
+
+The first run downloads the embedding and re-ranker models (~100 MB). Then create an account, upload PDFs, and ask.
+
+### Docker
+
+```bash
+cp .env.example .env             # add your GROQ_API_KEY
+docker compose up --build
+# open http://localhost:8501
+```
+
+Accounts, chats and indexes are stored in the `docmind-data` volume, so they survive restarts.
+
+## 💡 How to Use
+
+1. Create an account and log in.
+2. Open **Documents** in the sidebar, upload PDFs, click **Build index**.
+3. Ask questions. Follow-ups like "what about for gift cards?" work.
+4. Pin important chats, start a **New chat** for other documents, switch any time from the sidebar.
+5. Open **View evidence** under an answer to see the exact pages used.
+
+## ⚙️ How It Works (Short Version)
+
+1. **Ingest:** PDF → pages → overlapping chunks → vectors. Saved to disk per chat and loaded into FAISS + BM25.
+2. **Memory:** For follow-ups, the LLM rewrites your question into a standalone one using the last few messages.
+3. **Retrieve:** Search by meaning (FAISS) and by exact words (BM25), merge with **RRF**: `score = Σ 1 / (60 + rank)`.
+4. **Re-rank:** A cross-encoder reads each (question, chunk) pair and keeps the best few.
+5. **Generate:** The LLM answers using only those chunks, cites them, and the exchange is saved to SQLite.
+
+**Why RRF?** BM25 and cosine scores are on different scales, so they cannot be added. RRF only uses the *rank*.
+
+**Why save vectors?** Reopening a chat loads `chunks.json` + `vectors.npy` and rebuilds the indexes. No PDF parsing or embedding again.
+
+## 📊 Evaluation
+
+Measure what hybrid search and re-ranking actually add on **your** documents (no Groq key needed):
+
+```bash
+cp eval/questions.example.json eval/questions.json   # edit with your own questions
+python scripts/evaluate.py --pdf data/uploads/your.pdf --questions eval/questions.json --k 4
+```
+
+Each question needs `must_contain` (text the right chunk must include) or `expected_page`. The script prints **Hit@k** and **MRR** for Vector only, Vector + Re-rank, Hybrid, and Hybrid + Re-rank, and saves `eval/results.csv`.
+
+<!-- Paste your real results table here after running it on a public sample PDF. -->
+
+## 🧪 Tests
+
+```bash
+pytest
+```
+
+Covers chunking, BM25, RRF, accounts, chat isolation between users, pinning, cascade delete, and save / load of an index.
+
+## 🔧 Configuration
+
+All defaults live in `docmind/config.py`. Override the common ones in `.env`:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GROQ_API_KEY` | none | Required |
+| `LLM_MODEL` | `llama-3.3-70b-versatile` | Groq model |
+| `CHUNK_SIZE` | `800` | Characters per chunk |
+| `CHUNK_OVERLAP` | `100` | Overlap between chunks |
+
+## 🔒 Privacy and Security
+
+- Passwords are stored only as salted PBKDF2-SHA256 hashes.
+- Chats and the **extracted text** of your PDFs are saved in `data/` on the machine running the app (not the original PDF files).
+- Document passages and questions are sent to Groq to generate answers. Read Groq's terms and data policy before using confidential documents.
+- Deleting a chat deletes its messages and its saved index.
+- Login is session-based: refreshing the browser logs you out. Use HTTPS if you deploy publicly.
+
+## ⚖️ Licenses
+
+- This project: MIT (see `LICENSE`).
+- **Built with Llama.** Llama 3.3 is under the Llama 3.3 Community License and Meta's Acceptable Use Policy.
+- Other components are listed in `THIRD_PARTY_LICENSES.md`. Verify each one before commercial use.
+
+## ⚠️ Known Limitations
+
+- Scanned PDFs (images) are not supported yet. No OCR.
+- Login does not survive a browser refresh. No password reset.
+- Only PDF input for now.
+
+## 🗺️ Roadmap
+
+- [ ] OCR for scanned PDFs
+- [ ] DOCX / TXT / URL ingestion
+- [ ] Persistent login (cookie) and password reset
+- [ ] Streaming answers
+- [ ] Local LLM option (Ollama) for fully private use
+- [ ] FastAPI endpoint and embeddable widget
+
+## 👤 Author
+
+**Mustafa Amjad**
+[LinkedIn](https://www.linkedin.com/in/mustafaamjad9)
+
+## 📜 License
+
+MIT. See [LICENSE](LICENSE).
