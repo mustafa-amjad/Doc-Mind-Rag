@@ -10,6 +10,7 @@ import streamlit as st
 from docmind import auth, config, cookies, db
 from docmind.embedder import Embedder
 from docmind.llm import LLM
+from docmind.loader import SUPPORTED_TYPES, fetch_url
 from docmind.pipeline import RAGPipeline
 from docmind.reranker import Reranker
 
@@ -120,7 +121,7 @@ def hero() -> None:
         <div class="hero">
           <div class="hero-badge">Document Intelligence</div>
           <h1>Doc<span>Mind</span></h1>
-          <p>Ask questions across your PDFs and get answers backed by the exact pages they came from.</p>
+          <p>Ask questions across your documents and get answers backed by the exact pages they came from.</p>
           <div class="chips">
             <span class="chip">🔎 Hybrid search</span>
             <span class="chip">🧠 Cross-encoder re-ranking</span>
@@ -139,7 +140,7 @@ def steps(ready: bool) -> None:
         f"""
         <div class="step-grid">
           <div class="step-card {'active' if not ready else 'done'}"><div class="step-num">1</div>
-            <div class="step-title">Upload</div><div class="step-text">Open <b>Documents</b> in the sidebar and drop in your PDFs.</div></div>
+            <div class="step-title">Upload</div><div class="step-text">Open <b>Documents</b> in the sidebar. Add PDF, Word, TXT or a web link.</div></div>
           <div class="step-card"><div class="step-num">2</div>
             <div class="step-title">Build index</div><div class="step-text">We read, chunk and embed them once. Saved with this chat.</div></div>
           <div class="step-card {'active' if ready else ''}"><div class="step-num">3</div>
@@ -341,17 +342,23 @@ with st.sidebar:
 
     st.markdown('<div class="side-title">This chat</div>', unsafe_allow_html=True)
     with st.expander("📄 Documents", expanded=not pipeline.is_ready):
-        uploads = st.file_uploader("PDF files", type=["pdf"], accept_multiple_files=True,
-                                   label_visibility="collapsed", key=f"upload_{st.session_state.chat_id}")
+        uploads = st.file_uploader("Files", type=SUPPORTED_TYPES, accept_multiple_files=True,
+                                   label_visibility="collapsed", key=f"upload_{st.session_state.chat_id}",
+                                   help="PDF, DOCX, TXT, MD or HTML")
+        link = st.text_input("…or paste a web page / PDF link", placeholder="https://example.com/page",
+                             key=f"link_{st.session_state.chat_id}").strip()
         add_mode = True
         if pipeline.is_ready:  # chat already has documents -> let the user choose
             add_mode = st.radio("When building", ["Add to this chat", "Replace documents"], horizontal=False) \
                 == "Add to this chat"
         label = "⚙️ Build index" if not pipeline.is_ready else "⚙️ Update index"
-        if st.button(label, type="primary", use_container_width=True, disabled=not uploads):
+        if st.button(label, type="primary", use_container_width=True,
+                     disabled=not (uploads or link)):
             with st.spinner("Reading, chunking and embedding..."):
                 try:
                     files = [(f.name, f.getvalue()) for f in uploads]
+                    if link:  # download the link (public sites only)
+                        files.append(fetch_url(link))
                     st.session_state.stats = pipeline.ingest(files, append=add_mode)
                     if st.session_state.chat_id is None:  # first save: create the chat now
                         title = Path(files[0][0]).stem[:40] or DEFAULT_TITLE

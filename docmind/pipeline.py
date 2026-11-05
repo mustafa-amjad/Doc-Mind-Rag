@@ -12,7 +12,7 @@ from docmind import config
 from docmind.chunker import chunk_pages
 from docmind.hybrid import rrf_fusion
 from docmind.keyword_search import KeywordIndex
-from docmind.loader import load_pdf
+from docmind.loader import load_document
 from docmind.vector_store import VectorStore
 
 if TYPE_CHECKING:  # only for type hints, never imported at runtime (keeps tests light)
@@ -54,9 +54,9 @@ class RAGPipeline:
         """files = [(filename, pdf_bytes), ...]. append=True adds to the existing documents."""
         pages = []
         for filename, data in files:
-            pages.extend(load_pdf(data, filename))  # read every PDF
+            pages.extend(load_document(data, filename))  # read every file (PDF, DOCX, TXT, HTML...)
         if not pages:  # all pages empty -> probably scanned images
-            raise ValueError("No text found. The PDF may be scanned images (OCR is not supported yet).")
+            raise ValueError("No text found. If this is a scanned PDF, OCR is not supported yet.")
         new_chunks = chunk_pages(pages)  # cut into chunks
         if not new_chunks:
             raise ValueError("Text was found but it was too short to make chunks.")

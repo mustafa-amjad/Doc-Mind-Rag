@@ -16,6 +16,7 @@ RERANK_MODEL = os.getenv("RERANK_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "800"))  # max characters per chunk
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))  # characters repeated between neighbour chunks
 MIN_CHUNK_CHARS = 30  # throw away tiny junk chunks (page numbers, etc.)
+SECTION_CHARS = 3000  # DOCX/TXT/HTML are grouped into sections this big (section number = 'page')
 
 # ---- retrieval ----
 RETRIEVE_K = 10  # how many candidates each search (vector, keyword) brings back
@@ -40,3 +41,8 @@ HISTORY_TURNS = 6  # how many recent messages the AI "remembers" in a chat
 # ---- login sessions (stay logged in after refresh) ----
 COOKIE_NAME = "docmind_session"  # name of the browser cookie
 SESSION_DAYS = 30  # how long a login stays valid
+
+# ---- web links ----
+URL_TIMEOUT = 10  # seconds to wait for a website
+MAX_URL_BYTES = 10 * 1024 * 1024  # 10 MB download limit
+MAX_REDIRECTS = 3  # follow at most 3 redirects

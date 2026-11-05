@@ -12,6 +12,9 @@ DocMind uses the open-source components below. Licenses listed are what each pro
 | cross-encoder/ms-marco-MiniLM-L-6-v2 | Re-ranker model | Apache 2.0 on its model card. **Note:** trained on MS MARCO data, which has research-oriented terms. Review before paid/commercial use, or swap in another re-ranker. |
 | rank-bm25 | Keyword search | Apache 2.0 |
 | pypdf | PDF reading | BSD-3-Clause |
+| python-docx | Word file reading | MIT |
+| beautifulsoup4 | HTML text extraction | MIT |
+| requests | Downloading web links | Apache 2.0 |
 | langchain-text-splitters | Chunking | MIT |
 | Groq Python SDK | LLM API client | Apache 2.0 |
 | python-dotenv | Config | BSD-3-Clause |

@@ -58,6 +58,10 @@ flowchart LR
 
 ## ✨ Features
 
+**Documents**
+- PDF, **DOCX**, **TXT/MD**, **HTML** files and **web links** (PDF or page). For non-PDF files the citation "page" is the section number
+- Web links are limited to public sites: localhost, private networks and cloud metadata addresses are blocked, redirects are re-checked, downloads are capped at 10 MB
+
 **Retrieval**
 - Hybrid search (BM25 + vectors) with RRF, optional cross-encoder re-ranking
 - Flat or HNSW index chosen automatically by corpus size
@@ -83,7 +87,7 @@ flowchart LR
 |---|---|
 | UI | Streamlit + custom CSS |
 | Storage | SQLite (stdlib) + files on disk |
-| PDF parsing | pypdf |
+| Document parsing | pypdf, python-docx, BeautifulSoup |
 | Chunking | LangChain `RecursiveCharacterTextSplitter` |
 | Embeddings | `sentence-transformers/all-MiniLM-L6-v2` |
 | Vector search | FAISS (Flat + HNSW) |
@@ -102,7 +106,7 @@ docmind-rag/
 │   ├── db.py               # SQLite: users, chats, messages
 │   ├── auth.py             # sign up / log in (PBKDF2) + login sessions
 │   ├── cookies.py          # read / write the 'stay logged in' cookie
-│   ├── loader.py           # PDF -> pages
+│   ├── loader.py           # PDF / DOCX / TXT / HTML / URL -> pages
 │   ├── chunker.py          # pages -> chunks
 │   ├── embedder.py         # text -> vectors
 │   ├── vector_store.py     # FAISS Flat / HNSW
@@ -155,7 +159,7 @@ Accounts, chats and indexes are stored in the `docmind-data` volume, so they sur
 ## 💡 How to Use
 
 1. Create an account and log in.
-2. Open **Documents** in the sidebar, upload PDFs, click **Build index**.
+2. Open **Documents** in the sidebar, upload files (or paste a link), click **Build index**.
 3. Ask questions. Follow-ups like "what about for gift cards?" work.
 4. Pin important chats, start a **New chat** for other documents, switch any time from the sidebar.
 5. Open **View evidence** under an answer to see the exact pages used.
@@ -222,12 +226,11 @@ All defaults live in `docmind/config.py`. Override the common ones in `.env`:
 
 - Scanned PDFs (images) are not supported yet. No OCR.
 - No password reset yet.
-- Only PDF input for now.
+- Web-link download checks the address before connecting, but a determined DNS-rebinding attack is not fully ruled out. Keep the URL feature behind login (it is) and run the app without access to internal networks.
 
 ## 🗺️ Roadmap
 
 - [ ] OCR for scanned PDFs
-- [ ] DOCX / TXT / URL ingestion
 - [ ] Password reset
 - [ ] Streaming answers
 - [ ] Local LLM option (Ollama) for fully private use
