@@ -70,6 +70,8 @@ flowchart LR
 **Chats and accounts**
 - Sign up / log in (passwords stored as salted PBKDF2 hashes, never in plain text)
 - **Stay logged in** for 30 days, even after a browser refresh
+- **Forgot password:** one-time recovery code shown at signup, reset any time with username + code (the code is replaced after each use). Logged-in users can change their password and generate a new code
+- **Brute-force protection:** 5 wrong attempts locks login, reset and password change for 15 minutes
 - **New chat**, **Recent chats**, **Pinned chats**, one-click switching, rename, delete (with confirmation)
 - Each chat keeps its own documents. Reopen an old chat and keep asking. No re-upload, no re-embedding
 - Add more PDFs to a chat or replace them
@@ -210,7 +212,8 @@ All defaults live in `docmind/config.py`. Override the common ones in `.env`:
 
 ## 🔒 Privacy and Security
 
-- Passwords are stored only as salted PBKDF2-SHA256 hashes.
+- Passwords and recovery codes are stored only as salted PBKDF2-SHA256 hashes.
+- Changing or resetting a password logs out every other device. The lockout is per username, so someone could deliberately lock a known username for 15 minutes. That is the trade-off for stopping password guessing.
 - Chats and the **extracted text** of your PDFs are saved in `data/` on the machine running the app (not the original PDF files).
 - Document passages and questions are sent to Groq to generate answers. Read Groq's terms and data policy before using confidential documents.
 - Deleting a chat deletes its messages and its saved index.
@@ -225,13 +228,13 @@ All defaults live in `docmind/config.py`. Override the common ones in `.env`:
 ## ⚠️ Known Limitations
 
 - Scanned PDFs (images) are not supported yet. No OCR.
-- No password reset yet.
+- Password reset needs your saved recovery code (there is no email service). Lose both password and code and the account cannot be recovered.
 - Web-link download checks the address before connecting, but a determined DNS-rebinding attack is not fully ruled out. Keep the URL feature behind login (it is) and run the app without access to internal networks.
 
 ## 🗺️ Roadmap
 
 - [ ] OCR for scanned PDFs
-- [ ] Password reset
+- [ ] Email-based password reset (needs an email service)
 - [ ] Streaming answers
 - [ ] Local LLM option (Ollama) for fully private use
 - [ ] FastAPI endpoint and embeddable widget

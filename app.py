@@ -214,19 +214,24 @@ def render_auth() -> None:
     hero()
     _, middle, _ = st.columns([1, 1.6, 1])
     with middle:
-        login_tab, signup_tab = st.tabs(["🔐 Log in", "✨ Create account"])
+        login_tab, signup_tab, forgot_tab = st.tabs(["🔐 Log in", "✨ Create account", "🔑 Forgot password"])
         with login_tab:
             with st.form("login_form"):
                 username = st.text_input("Username", key="login_user")
                 password = st.text_input("Password", type="password", key="login_pass")
                 submitted = st.form_submit_button("Log in", type="primary", use_container_width=True)
             if submitted:
-                user = auth.login(username, password)
-                if user:
-                    start_login(user)
-                    st.rerun()
+                try:
+                    user = auth.login(username, password)
+                except ValueError as error:  # locked out after too many wrong attempts
+                    st.error(str(error))
+                    user = None
                 else:
-                    st.error("Wrong username or password.")
+                    if user:
+                        start_login(user)
+                        st.rerun()
+                    else:
+                        st.error("Wrong username or password.")
         with signup_tab:
             with st.form("signup_form"):
                 new_user = st.text_input("Choose a username", key="signup_user")
@@ -238,11 +243,44 @@ def render_auth() -> None:
                     st.error("Passwords do not match.")
                 else:
                     try:
-                        start_login(auth.signup(new_user, new_pass))
+                        created_user = auth.signup(new_user, new_pass)
+                        st.session_state.new_recovery_code = created_user.pop("recovery_code")  # shown once, next screen
+                        start_login(created_user)
                         st.rerun()
                     except ValueError as error:
                         st.error(str(error))
+        with forgot_tab:
+            st.caption("Enter the recovery code you saved when you created your account.")
+            with st.form("forgot_form"):
+                forgot_user = st.text_input("Username", key="forgot_user")
+                forgot_code = st.text_input("Recovery code", key="forgot_code", placeholder="XXXXX-XXXXX-XXXXX-XXXXX")
+                forgot_pass = st.text_input("New password (8+ characters)", type="password", key="forgot_pass")
+                reset_clicked = st.form_submit_button("Reset password", type="primary", use_container_width=True)
+            if reset_clicked:
+                try:
+                    reset_user = auth.reset_password(forgot_user, forgot_code, forgot_pass)
+                    st.session_state.new_recovery_code = reset_user.pop("recovery_code")  # the old code is dead
+                    start_login(reset_user)
+                    st.rerun()
+                except ValueError as error:
+                    st.error(str(error))
         st.caption("Your chats and indexed document text are saved on this server, under your account only.")
+
+
+def render_recovery_code_screen(code: str) -> None:
+    """Shown once after signup / reset / new code. Nothing else works until the user confirms."""
+    hero()
+    _, middle, _ = st.columns([1, 1.6, 1])
+    with middle:
+        st.markdown('<div class="section-title">Save your recovery code</div>', unsafe_allow_html=True)
+        st.warning("This is the ONLY way to reset your password if you forget it. It is shown just once. "
+                   "Keep it in a password manager.")
+        st.code(code, language=None)
+        st.download_button("⬇️ Download as text file", data=f"DocMind recovery code: {code}\n",
+                           file_name="docmind_recovery_code.txt", use_container_width=True)
+        if st.button("I saved it. Continue", type="primary", use_container_width=True):
+            st.session_state.pop("new_recovery_code", None)
+            st.rerun()
 
 
 # ====================== sidebar: chat list ======================
@@ -288,6 +326,10 @@ if st.session_state.get("user") is None:  # new browser tab: maybe the saved coo
 
 if st.session_state.get("user") is None:  # still not logged in -> show login and stop
     render_auth()
+    st.stop()
+
+if st.session_state.get("new_recovery_code"):  # must see the code before using the app
+    render_recovery_code_screen(st.session_state.new_recovery_code)
     st.stop()
 
 if not config.GROQ_API_KEY:  # no key -> stop early with a clear message
@@ -386,6 +428,29 @@ with st.sidebar:
         use_container_width=True,
         disabled=not st.session_state.messages,
     )
+    with st.expander("👤 Account"):
+        with st.form("change_password_form", clear_on_submit=True):
+            st.caption("Change password")
+            old_pass = st.text_input("Current password", type="password")
+            new_pass_1 = st.text_input("New password (8+ characters)", type="password")
+            change_clicked = st.form_submit_button("Change password", use_container_width=True)
+        if change_clicked:
+            try:
+                auth.change_password(user_id, old_pass, new_pass_1)
+                start_login(user)  # old logins were removed, so issue a fresh one for this browser
+                st.toast("Password changed. Other devices were logged out.", icon="✅")
+            except ValueError as error:
+                st.error(str(error))
+        with st.form("new_code_form", clear_on_submit=True):
+            st.caption("New recovery code (the old one stops working)")
+            code_pass = st.text_input("Your password", type="password", key="code_pass")
+            code_clicked = st.form_submit_button("Generate new code", use_container_width=True)
+        if code_clicked:
+            try:
+                st.session_state.new_recovery_code = auth.regenerate_recovery_code(user_id, code_pass)
+                st.rerun()
+            except ValueError as error:
+                st.error(str(error))
     st.markdown('<div class="side-foot">Built with Llama · Inference by Groq</div>', unsafe_allow_html=True)
 
 # ====================== main area ======================

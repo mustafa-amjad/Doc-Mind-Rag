@@ -32,7 +32,14 @@ def init_db() -> None:
                 username TEXT NOT NULL UNIQUE COLLATE NOCASE,
                 salt TEXT NOT NULL,
                 pw_hash TEXT NOT NULL,
+                recovery_salt TEXT NOT NULL DEFAULT '',
+                recovery_hash TEXT NOT NULL DEFAULT '',
                 created_at REAL NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS login_attempts (
+                key TEXT PRIMARY KEY,
+                fails INTEGER NOT NULL DEFAULT 0,
+                locked_until REAL NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS chats (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,15 +68,21 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_messages_chat ON messages(chat_id, id);
             """
         )
+        # upgrade older databases that were created before recovery codes existed
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
+        for column in ("recovery_salt", "recovery_hash"):
+            if column not in columns:
+                conn.execute(f"ALTER TABLE users ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
 
 
 # ---------------- users ----------------
-def create_user(username: str, salt: str, pw_hash: str) -> dict:
+def create_user(username: str, salt: str, pw_hash: str, recovery_salt: str = "", recovery_hash: str = "") -> dict:
     try:
         with connect() as conn:
             cur = conn.execute(
-                "INSERT INTO users (username, salt, pw_hash, created_at) VALUES (?, ?, ?, ?)",
-                (username, salt, pw_hash, time.time()),
+                "INSERT INTO users (username, salt, pw_hash, recovery_salt, recovery_hash, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (username, salt, pw_hash, recovery_salt, recovery_hash, time.time()),
             )
             return {"id": cur.lastrowid, "username": username}
     except sqlite3.IntegrityError:  # UNIQUE failed -> name taken
@@ -181,3 +194,52 @@ def get_session_user(token_hash: str) -> dict | None:
 def delete_session(token_hash: str) -> None:
     with connect() as conn:
         conn.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash,))
+
+
+# ---------------- password reset + rate limiting ----------------
+def get_user_by_id(user_id: int) -> dict | None:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def set_password(user_id: int, salt: str, pw_hash: str) -> None:
+    with connect() as conn:
+        conn.execute("UPDATE users SET salt = ?, pw_hash = ? WHERE id = ?", (salt, pw_hash, user_id))
+
+
+def set_recovery(user_id: int, salt: str, recovery_hash: str) -> None:
+    with connect() as conn:
+        conn.execute("UPDATE users SET recovery_salt = ?, recovery_hash = ? WHERE id = ?", (salt, recovery_hash, user_id))
+
+
+def delete_user_sessions(user_id: int) -> None:
+    """Log the user out everywhere (used after a password change or reset)."""
+    with connect() as conn:
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+
+
+def get_lock_until(key: str) -> float:
+    with connect() as conn:
+        row = conn.execute("SELECT locked_until FROM login_attempts WHERE key = ?", (key,)).fetchone()
+        return row["locked_until"] if row else 0.0
+
+
+def record_failure(key: str, max_fails: int, lock_seconds: int) -> None:
+    """Count a failed attempt. After max_fails the key is locked and the counter starts fresh."""
+    with connect() as conn:
+        row = conn.execute("SELECT fails FROM login_attempts WHERE key = ?", (key,)).fetchone()
+        fails = (row["fails"] if row else 0) + 1
+        locked_until = 0.0
+        if fails >= max_fails:
+            locked_until, fails = time.time() + lock_seconds, 0
+        conn.execute(
+            "INSERT INTO login_attempts (key, fails, locked_until) VALUES (?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET fails = excluded.fails, locked_until = excluded.locked_until",
+            (key, fails, locked_until),
+        )
+
+
+def clear_failures(key: str) -> None:
+    with connect() as conn:
+        conn.execute("DELETE FROM login_attempts WHERE key = ?", (key,))
