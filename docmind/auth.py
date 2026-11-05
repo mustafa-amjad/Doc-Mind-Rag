@@ -3,8 +3,10 @@ import hashlib  # PBKDF2 hashing
 import hmac  # safe string compare
 import os  # random salt
 import re
+import secrets  # cryptographically safe random tokens
+import time
 
-from docmind import db
+from docmind import config, db
 
 ITERATIONS = 600_000  # how many times we hash (slow on purpose, makes guessing hard)
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.]{3,30}$")  # letters, numbers, _ and . only
@@ -41,3 +43,29 @@ def login(username: str, password: str) -> dict | None:
     if not verify_password(password, row["salt"], row["pw_hash"]):
         return None
     return {"id": row["id"], "username": row["username"]}
+
+
+# ---------------- "stay logged in" sessions ----------------
+def _hash_token(token: str) -> str:
+    """Tokens are long and random, so a plain SHA-256 is enough (we never store the token itself)."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def create_session(user_id: int) -> str:
+    """Make a new random token, save its hash, and return the token (goes into the browser cookie)."""
+    token = secrets.token_urlsafe(32)  # 256 bits of randomness
+    db.create_session(user_id, _hash_token(token), time.time() + config.SESSION_DAYS * 86400)
+    return token
+
+
+def user_from_token(token: str | None) -> dict | None:
+    """Cookie value -> user, or None if missing / unknown / expired."""
+    if not token:
+        return None
+    return db.get_session_user(_hash_token(token))
+
+
+def end_session(token: str | None) -> None:
+    """Log out: the token stops working immediately, even if the cookie is still in the browser."""
+    if token:
+        db.delete_session(_hash_token(token))

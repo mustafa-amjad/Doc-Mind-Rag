@@ -36,3 +36,7 @@ INDEX_DIR = DATA_DIR / "indexes"  # one folder per chat: chunks + vectors
 
 # ---- chat memory ----
 HISTORY_TURNS = 6  # how many recent messages the AI "remembers" in a chat
+
+# ---- login sessions (stay logged in after refresh) ----
+COOKIE_NAME = "docmind_session"  # name of the browser cookie
+SESSION_DAYS = 30  # how long a login stays valid

@@ -7,7 +7,7 @@ from pathlib import Path  # builds file paths that work on Windows and Mac
 
 import streamlit as st
 
-from docmind import auth, config, db
+from docmind import auth, config, cookies, db
 from docmind.embedder import Embedder
 from docmind.llm import LLM
 from docmind.pipeline import RAGPipeline
@@ -195,7 +195,15 @@ def open_chat(chat_id: int) -> None:
     st.session_state.confirm_delete = None
 
 
+def start_login(user: dict) -> None:
+    """Log in for this tab AND remember the user in a browser cookie (survives refresh)."""
+    st.session_state.user = user
+    cookies.queue_set(auth.create_session(user["id"]))
+
+
 def logout() -> None:
+    auth.end_session(cookies.read_token())  # kill the saved login so the old cookie stops working
+    cookies.queue_clear()  # and remove the cookie from the browser
     for key in ("user", "chat_id", "messages", "pipeline", "stats", "confirm_delete", "pending_question"):
         st.session_state.pop(key, None)
 
@@ -214,7 +222,7 @@ def render_auth() -> None:
             if submitted:
                 user = auth.login(username, password)
                 if user:
-                    st.session_state.user = user
+                    start_login(user)
                     st.rerun()
                 else:
                     st.error("Wrong username or password.")
@@ -229,7 +237,7 @@ def render_auth() -> None:
                     st.error("Passwords do not match.")
                 else:
                     try:
-                        st.session_state.user = auth.signup(new_user, new_pass)
+                        start_login(auth.signup(new_user, new_pass))
                         st.rerun()
                     except ValueError as error:
                         st.error(str(error))
@@ -272,8 +280,12 @@ def chat_row(chat: dict, active: bool, user_id: int) -> None:
 # ====================== START ======================
 load_css()
 db.init_db()  # creates data/docmind.db and tables on first run
+cookies.apply_pending()  # write or clear the login cookie if a login/logout just happened
 
-if st.session_state.get("user") is None:  # not logged in -> show login and stop
+if st.session_state.get("user") is None:  # new browser tab: maybe the saved cookie still works
+    st.session_state.user = auth.user_from_token(cookies.read_token())
+
+if st.session_state.get("user") is None:  # still not logged in -> show login and stop
     render_auth()
     st.stop()
 

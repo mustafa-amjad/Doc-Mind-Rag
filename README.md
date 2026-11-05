@@ -65,6 +65,7 @@ flowchart LR
 
 **Chats and accounts**
 - Sign up / log in (passwords stored as salted PBKDF2 hashes, never in plain text)
+- **Stay logged in** for 30 days, even after a browser refresh
 - **New chat**, **Recent chats**, **Pinned chats**, one-click switching, rename, delete (with confirmation)
 - Each chat keeps its own documents. Reopen an old chat and keep asking. No re-upload, no re-embedding
 - Add more PDFs to a chat or replace them
@@ -99,7 +100,8 @@ docmind-rag/
 ├── docmind/                # core package
 │   ├── config.py           # all settings in one place
 │   ├── db.py               # SQLite: users, chats, messages
-│   ├── auth.py             # sign up / log in (PBKDF2)
+│   ├── auth.py             # sign up / log in (PBKDF2) + login sessions
+│   ├── cookies.py          # read / write the 'stay logged in' cookie
 │   ├── loader.py           # PDF -> pages
 │   ├── chunker.py          # pages -> chunks
 │   ├── embedder.py         # text -> vectors
@@ -208,7 +210,7 @@ All defaults live in `docmind/config.py`. Override the common ones in `.env`:
 - Chats and the **extracted text** of your PDFs are saved in `data/` on the machine running the app (not the original PDF files).
 - Document passages and questions are sent to Groq to generate answers. Read Groq's terms and data policy before using confidential documents.
 - Deleting a chat deletes its messages and its saved index.
-- Login is session-based: refreshing the browser logs you out. Use HTTPS if you deploy publicly.
+- "Stay logged in" uses a random token in a browser cookie (30 days). Only a hash of the token is stored on the server, and logout invalidates it immediately. The cookie is set from JavaScript, so it cannot be `HttpOnly`. Use HTTPS if you deploy publicly (the `Secure` flag is added automatically on https).
 
 ## ⚖️ Licenses
 
@@ -219,14 +221,14 @@ All defaults live in `docmind/config.py`. Override the common ones in `.env`:
 ## ⚠️ Known Limitations
 
 - Scanned PDFs (images) are not supported yet. No OCR.
-- Login does not survive a browser refresh. No password reset.
+- No password reset yet.
 - Only PDF input for now.
 
 ## 🗺️ Roadmap
 
 - [ ] OCR for scanned PDFs
 - [ ] DOCX / TXT / URL ingestion
-- [ ] Persistent login (cookie) and password reset
+- [ ] Password reset
 - [ ] Streaming answers
 - [ ] Local LLM option (Ollama) for fully private use
 - [ ] FastAPI endpoint and embeddable widget

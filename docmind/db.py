@@ -52,6 +52,11 @@ def init_db() -> None:
                 searched TEXT NOT NULL DEFAULT '',
                 created_at REAL NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS sessions (
+                token_hash TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                expires_at REAL NOT NULL
+            );
             CREATE INDEX IF NOT EXISTS idx_chats_user ON chats(user_id, pinned, updated_at);
             CREATE INDEX IF NOT EXISTS idx_messages_chat ON messages(chat_id, id);
             """
@@ -150,3 +155,29 @@ def get_messages(chat_id: int, user_id: int) -> list[dict]:
              "meta": r["meta"], "searched": r["searched"]}
             for r in rows
         ]
+
+
+# ---------------- login sessions (only a HASH of the token is stored) ----------------
+def create_session(user_id: int, token_hash: str, expires_at: float) -> None:
+    with connect() as conn:
+        conn.execute("DELETE FROM sessions WHERE expires_at < ?", (time.time(),))  # clean old ones
+        conn.execute(
+            "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)",
+            (token_hash, user_id, expires_at),
+        )
+
+
+def get_session_user(token_hash: str) -> dict | None:
+    """Return {id, username} if the token exists and has not expired."""
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT u.id, u.username FROM sessions s JOIN users u ON u.id = s.user_id "
+            "WHERE s.token_hash = ? AND s.expires_at > ?",
+            (token_hash, time.time()),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def delete_session(token_hash: str) -> None:
+    with connect() as conn:
+        conn.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash,))
