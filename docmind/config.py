@@ -46,3 +46,7 @@ SESSION_DAYS = 30  # how long a login stays valid
 URL_TIMEOUT = 10  # seconds to wait for a website
 MAX_URL_BYTES = 10 * 1024 * 1024  # 10 MB download limit
 MAX_REDIRECTS = 3  # follow at most 3 redirects
+
+# ---- OCR (scanned PDFs) ----
+OCR_SCALE = 2.0  # render pages at 2x zoom before reading (sharper text)
+MAX_OCR_PAGES = 50  # per file, so one huge scan cannot freeze the server

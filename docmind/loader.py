@@ -14,6 +14,7 @@ from docx import Document  # reads Word files
 from pypdf import PdfReader  # PDF reading library
 
 from docmind import config
+from docmind import ocr as ocr_engine
 
 SUPPORTED_TYPES = ["pdf", "docx", "txt", "md", "html"]  # shown in the upload box
 
@@ -34,15 +35,22 @@ def split_sections(text: str, filename: str) -> list[dict]:
 
 
 # ---------------- one loader per format ----------------
-def load_pdf(file_bytes: bytes, filename: str) -> list[dict]:
-    """Return a list of {text, source, page}. Pages with no text are skipped."""
+def load_pdf(file_bytes: bytes, filename: str, use_ocr: bool = False) -> list[dict]:
+    """Return a list of {text, source, page}. Pages without a text layer are OCR'd if use_ocr is on."""
     reader = PdfReader(io.BytesIO(file_bytes))  # open the PDF from memory (no temp file needed)
-    pages = []  # we collect good pages here
+    pages, empty = [], []  # good pages / page numbers that have no text
     for page_number, page in enumerate(reader.pages, start=1):  # start=1 so humans see page 1, not 0
         text = (page.extract_text() or "").strip()  # extract_text can return None -> use "" instead
-        if not text:  # empty page (maybe a scanned image) -> skip it
+        if not text:  # empty page (probably a scanned image)
+            empty.append(page_number)
             continue
         pages.append({"text": text, "source": filename, "page": page_number})
+    if use_ocr and empty:  # read the scanned pages as pictures
+        todo = empty[: config.MAX_OCR_PAGES]  # safety limit per file
+        for page_number, text in ocr_engine.ocr_pdf_pages(file_bytes, todo).items():
+            if text:
+                pages.append({"text": text, "source": filename, "page": page_number, "ocr": True})
+        pages.sort(key=lambda item: item["page"])  # keep reading order
     return pages
 
 
@@ -77,11 +85,14 @@ LOADERS = {".pdf": load_pdf, ".docx": load_docx, ".txt": load_text, ".md": load_
            ".html": load_html, ".htm": load_html}
 
 
-def load_document(file_bytes: bytes, filename: str) -> list[dict]:
-    """Pick the right loader from the file extension."""
-    loader = LOADERS.get(Path(filename).suffix.lower())
+def load_document(file_bytes: bytes, filename: str, use_ocr: bool = False) -> list[dict]:
+    """Pick the right loader from the file extension. OCR only applies to PDFs."""
+    extension = Path(filename).suffix.lower()
+    loader = LOADERS.get(extension)
     if loader is None:
         raise ValueError(f"Unsupported file type: {filename}. Use PDF, DOCX, TXT, MD or HTML.")
+    if extension == ".pdf":
+        return load_pdf(file_bytes, filename, use_ocr)
     return loader(file_bytes, filename)
 
 

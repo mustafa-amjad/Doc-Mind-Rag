@@ -62,6 +62,8 @@ flowchart LR
 - PDF, **DOCX**, **TXT/MD**, **HTML** files and **web links** (PDF or page). For non-PDF files the citation "page" is the section number
 - Web links are limited to public sites: localhost, private networks and cloud metadata addresses are blocked, redirects are re-checked, downloads are capped at 10 MB
 
+- **OCR for scanned PDFs** (optional, pure pip): pages without a text layer are rendered and read; evidence shows an "OCR" badge because scanned text can contain small errors
+
 **Retrieval**
 - Hybrid search (BM25 + vectors) with RRF, optional cross-encoder re-ranking
 - Flat or HNSW index chosen automatically by corpus size
@@ -90,6 +92,7 @@ flowchart LR
 | UI | Streamlit + custom CSS |
 | Storage | SQLite (stdlib) + files on disk |
 | Document parsing | pypdf, python-docx, BeautifulSoup |
+| OCR (optional) | pypdfium2 + RapidOCR (ONNX) |
 | Chunking | LangChain `RecursiveCharacterTextSplitter` |
 | Embeddings | `sentence-transformers/all-MiniLM-L6-v2` |
 | Vector search | FAISS (Flat + HNSW) |
@@ -109,6 +112,7 @@ docmind-rag/
 │   ├── auth.py             # sign up / log in (PBKDF2) + login sessions
 │   ├── cookies.py          # read / write the 'stay logged in' cookie
 │   ├── loader.py           # PDF / DOCX / TXT / HTML / URL -> pages
+│   ├── ocr.py              # optional OCR for scanned PDFs
 │   ├── chunker.py          # pages -> chunks
 │   ├── embedder.py         # text -> vectors
 │   ├── vector_store.py     # FAISS Flat / HNSW
@@ -126,7 +130,7 @@ docmind-rag/
 ├── .vscode/                # VS Code run + test config
 ├── Dockerfile  docker-compose.yml  .dockerignore
 ├── NOTICE  THIRD_PARTY_LICENSES.md  LICENSE
-├── .env.example  requirements.txt
+├── .env.example  requirements.txt  requirements-ocr.txt
 └── README.md
 ```
 
@@ -139,6 +143,7 @@ cd docmind-rag
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+pip install -r requirements-ocr.txt   # optional: read scanned PDFs
 
 cp .env.example .env             # Windows: copy .env.example .env
 # open .env and paste GROQ_API_KEY (free key: https://console.groq.com)
@@ -227,13 +232,12 @@ All defaults live in `docmind/config.py`. Override the common ones in `.env`:
 
 ## ⚠️ Known Limitations
 
-- Scanned PDFs (images) are not supported yet. No OCR.
+- OCR is optional, slower, and limited to 50 pages per file. Handwriting and low-quality scans can give wrong text.
 - Password reset needs your saved recovery code (there is no email service). Lose both password and code and the account cannot be recovered.
 - Web-link download checks the address before connecting, but a determined DNS-rebinding attack is not fully ruled out. Keep the URL feature behind login (it is) and run the app without access to internal networks.
 
 ## 🗺️ Roadmap
 
-- [ ] OCR for scanned PDFs
 - [ ] Email-based password reset (needs an email service)
 - [ ] Streaming answers
 - [ ] Local LLM option (Ollama) for fully private use

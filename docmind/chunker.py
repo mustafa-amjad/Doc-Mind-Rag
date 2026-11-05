@@ -23,6 +23,7 @@ def chunk_pages(pages: list[dict]) -> list[dict]:
                     "text": piece,
                     "source": page["source"],  # which file
                     "page": page["page"],  # which page (used for citations)
+                    "ocr": bool(page.get("ocr")),  # True if the text came from OCR (can contain small errors)
                 }
             )
     return chunks

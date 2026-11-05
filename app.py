@@ -7,7 +7,7 @@ from pathlib import Path  # builds file paths that work on Windows and Mac
 
 import streamlit as st
 
-from docmind import auth, config, cookies, db
+from docmind import auth, config, cookies, db, ocr
 from docmind.embedder import Embedder
 from docmind.llm import LLM
 from docmind.loader import SUPPORTED_TYPES, fetch_url
@@ -80,6 +80,7 @@ def evidence_html(sources: list[dict]) -> str:
     rows = []
     for number, src in enumerate(sources, start=1):
         score = f'<span class="chip muted">match {src["rerank_score"]:.2f}</span>' if "rerank_score" in src else ""
+        score += ' <span class="chip">🔍 OCR</span>' if src.get("ocr") else ""  # text came from a scan
         rows.append(
             f'<div class="src">'
             f'<div class="src-head"><span class="src-num">{number}</span>'
@@ -389,6 +390,11 @@ with st.sidebar:
                                    help="PDF, DOCX, TXT, MD or HTML")
         link = st.text_input("…or paste a web page / PDF link", placeholder="https://example.com/page",
                              key=f"link_{st.session_state.chat_id}").strip()
+        ocr_ready = ocr.is_available()
+        ocr_on = st.toggle("🔍 OCR scanned pages", value=ocr_ready, disabled=not ocr_ready,
+                           help=f"Reads PDF pages that are only pictures. Slower. Up to {config.MAX_OCR_PAGES} pages per file.")
+        if not ocr_ready:
+            st.caption("OCR is not installed. Run `pip install -r requirements-ocr.txt` and restart.")
         add_mode = True
         if pipeline.is_ready:  # chat already has documents -> let the user choose
             add_mode = st.radio("When building", ["Add to this chat", "Replace documents"], horizontal=False) \
@@ -396,17 +402,19 @@ with st.sidebar:
         label = "⚙️ Build index" if not pipeline.is_ready else "⚙️ Update index"
         if st.button(label, type="primary", use_container_width=True,
                      disabled=not (uploads or link)):
-            with st.spinner("Reading, chunking and embedding..."):
+            with st.spinner("Reading, chunking and embedding..." + (" OCR can take a while." if ocr_on else "")):
                 try:
                     files = [(f.name, f.getvalue()) for f in uploads]
                     if link:  # download the link (public sites only)
                         files.append(fetch_url(link))
-                    st.session_state.stats = pipeline.ingest(files, append=add_mode)
+                    st.session_state.stats = pipeline.ingest(files, append=add_mode, ocr=ocr_on)
                     if st.session_state.chat_id is None:  # first save: create the chat now
                         title = Path(files[0][0]).stem[:40] or DEFAULT_TITLE
                         st.session_state.chat_id = db.create_chat(user_id, title)
                     pipeline.save(index_folder(user_id, st.session_state.chat_id))  # keep the index for later
-                    st.toast("Index saved. Ask your first question!", icon="✅")
+                    ocr_pages = st.session_state.stats.get("ocr_pages", 0)
+                    st.toast("Index saved. Ask your first question!" + (f" OCR read {ocr_pages} scanned pages." if ocr_pages else ""),
+                             icon="✅")
                     st.rerun()
                 except ValueError as error:  # friendly message instead of a crash
                     st.error(str(error))

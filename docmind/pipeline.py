@@ -50,13 +50,16 @@ class RAGPipeline:
         self.store.add(vectors)
         self.keyword = KeywordIndex([c["text"] for c in chunks])
 
-    def ingest(self, files: list[tuple[str, bytes]], append: bool = False) -> dict:
+    def ingest(self, files: list[tuple[str, bytes]], append: bool = False, ocr: bool = False) -> dict:
         """files = [(filename, pdf_bytes), ...]. append=True adds to the existing documents."""
         pages = []
         for filename, data in files:
-            pages.extend(load_document(data, filename))  # read every file (PDF, DOCX, TXT, HTML...)
+            pages.extend(load_document(data, filename, ocr))  # read every file (PDF, DOCX, TXT, HTML...)
         if not pages:  # all pages empty -> probably scanned images
-            raise ValueError("No text found. If this is a scanned PDF, OCR is not supported yet.")
+            raise ValueError(
+                "No text found, even with OCR." if ocr
+                else "No text found. This looks like a scanned PDF: turn on OCR in the Documents panel."
+            )
         new_chunks = chunk_pages(pages)  # cut into chunks
         if not new_chunks:
             raise ValueError("Text was found but it was too short to make chunks.")
@@ -76,7 +79,9 @@ class RAGPipeline:
             self.page_count = len(pages)
 
         self._build_indexes(chunks, vectors)
-        return self.stats()
+        stats = self.stats()
+        stats["ocr_pages"] = sum(1 for page in pages if page.get("ocr"))  # shown in the UI message
+        return stats
 
     # ---------------- save / load (this is what makes old chats usable again) ----------------
     def save(self, folder: Path) -> None:
