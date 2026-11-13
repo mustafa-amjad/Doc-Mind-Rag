@@ -49,7 +49,7 @@ def shorten(text: str, limit: int = 220) -> str:
 @st.cache_resource(show_spinner="Loading models (first run only)...")
 def load_models():
     """Heavy models load ONCE and are shared by every browser session."""
-    return Embedder(config.EMBED_MODEL), Reranker(config.RERANK_MODEL), LLM(config.GROQ_API_KEY, config.LLM_MODEL)
+    return Embedder(config.EMBED_MODEL), Reranker(config.RERANK_MODEL)
 
 
 def index_folder(user_id: int, chat_id: int) -> Path:
@@ -302,13 +302,22 @@ if st.session_state.get("new_recovery_code"):  # must see the code before using 
     render_recovery_code_screen(st.session_state.new_recovery_code)
     st.stop()
 
-if not config.GROQ_API_KEY:  # no key -> stop early with a clear message
-    st.error("**GROQ_API_KEY is not set.** Copy `.env.example` to `.env`, add your key, then restart the app.",
-             icon=":material/key_off:")
+api_key = config.GROQ_API_KEY or st.session_state.get("visitor_groq_key", "")
+if not api_key:  # no server key (e.g. public demo) -> let the visitor use their own
+    st.info("This demo runs on Groq. Add your own free API key to continue.", icon=":material/key:")
+    with st.form("groq_key"):
+        entered = st.text_input(
+            "Groq API key", type="password",
+            help="Get one free at console.groq.com. It stays in this browser session and is never saved.",
+        )
+        if st.form_submit_button("Continue", type="primary") and entered.strip():
+            st.session_state.visitor_groq_key = entered.strip()
+            st.rerun()
     st.stop()
 
 if "embedder" not in st.session_state:  # models are cached globally, we just keep handy references
-    st.session_state.embedder, st.session_state.reranker, st.session_state.llm = load_models()
+    st.session_state.embedder, st.session_state.reranker = load_models()
+    st.session_state.llm = LLM(api_key, config.LLM_MODEL)  # per session: the key may be the visitor's
 if "pipeline" not in st.session_state:  # first run after login -> blank chat
     new_chat()
 
