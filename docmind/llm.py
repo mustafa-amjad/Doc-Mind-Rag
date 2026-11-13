@@ -1,7 +1,23 @@
 """The LLM: rewrites follow-up questions and writes answers using ONLY the retrieved chunks."""
+import groq
 from groq import Groq
 
 from docmind import config
+
+
+def friendly_error(error: Exception) -> str:
+    """Turn an API exception into a message a user can act on."""
+    if isinstance(error, groq.AuthenticationError):
+        return "Groq rejected the API key (invalid or expired). Update GROQ_API_KEY in .env and restart the app."
+    if isinstance(error, groq.RateLimitError):
+        return "Groq rate limit reached. Wait a moment and try again."
+    if isinstance(error, groq.APIConnectionError):
+        return "Could not reach Groq. Check your internet connection and try again."
+    if isinstance(error, groq.NotFoundError):
+        return f"Model '{config.LLM_MODEL}' is not available on Groq. Set LLM_MODEL in .env to a current model."
+    if isinstance(error, groq.APIStatusError):
+        return f"Groq returned an error (HTTP {error.status_code}). Try again shortly."
+    return f"The answer could not be generated ({type(error).__name__})."
 
 SYSTEM_PROMPT = (
     "You are a careful assistant that answers questions about the user's documents. "

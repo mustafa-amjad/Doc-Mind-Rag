@@ -1,4 +1,4 @@
-# 📄 DocMind RAG
+# DocMind RAG
 
 **Chat with your PDFs. Get answers with page-level citations. Your chats are saved.**
 A production-style Retrieval-Augmented Generation (RAG) app with **hybrid search (BM25 + vector)**, **FAISS HNSW indexing**, **cross-encoder re-ranking**, **chat memory**, **user accounts**, and **saved / pinned chats**. Powered by **Groq (Llama 3.3 70B)** and **Streamlit**.
@@ -12,7 +12,7 @@ A production-style Retrieval-Augmented Generation (RAG) app with **hybrid search
 
 ---
 
-## 🎯 The Problem
+## The Problem
 
 LLMs don't know your private documents, and basic "embed and search" RAG often fails:
 - It misses exact terms like IDs, names, and error codes.
@@ -21,7 +21,7 @@ LLMs don't know your private documents, and basic "embed and search" RAG often f
 - Answers come with no proof of where they came from.
 - Every refresh throws away your work.
 
-## ✅ The Solution
+## The Solution
 
 | Problem | Technique used |
 |---|---|
@@ -34,7 +34,7 @@ LLMs don't know your private documents, and basic "embed and search" RAG often f
 | Can't tell what helps | **UI toggles** to turn hybrid, re-ranking and memory on/off |
 | Long, noisy sources | **Compact evidence**: page chips + collapsed, shortened passages |
 
-## 🏗️ Architecture
+## Architecture
 
 ```mermaid
 flowchart LR
@@ -56,7 +56,7 @@ flowchart LR
     K --> DB[(SQLite<br/>users, chats, messages)]
 ```
 
-## ✨ Features
+## Features
 
 **Documents**
 - PDF, **DOCX**, **TXT/MD**, **HTML** files and **web links** (PDF or page). For non-PDF files the citation "page" is the section number
@@ -81,18 +81,18 @@ flowchart LR
 - Users can only see their own chats (every query is scoped by user id)
 
 **Interface**
-- Dark professional theme (`assets/style.css`), guided onboarding, one-click starter questions
+- Clean light/dark theme defined in `.streamlit/config.toml` (no custom CSS), Material icons, one-click starter questions
 - Source chips (file · page), collapsed evidence, speed badge on every answer
 - Export any chat to Markdown
 
-## 🧰 Tech Stack
+## Tech Stack
 
 | Layer | Tool |
 |---|---|
 | UI | Streamlit + custom CSS |
 | Storage | SQLite (stdlib) + files on disk |
 | Document parsing | pypdf, python-docx, BeautifulSoup |
-| OCR (optional) | pypdfium2 + RapidOCR (ONNX) |
+| OCR (optional) | pypdfium2 + RapidOCR (`rapidocr` + ONNX Runtime) |
 | Chunking | LangChain `RecursiveCharacterTextSplitter` |
 | Embeddings | `sentence-transformers/all-MiniLM-L6-v2` |
 | Vector search | FAISS (Flat + HNSW) |
@@ -101,7 +101,7 @@ flowchart LR
 | LLM | Groq, `llama-3.3-70b-versatile` |
 | Tests | pytest |
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 docmind-rag/
@@ -125,8 +125,8 @@ docmind-rag/
 ├── eval/                   # example test questions
 ├── tests/                  # unit tests
 ├── data/                   # saved accounts, chats, indexes (git-ignored)
-├── assets/                 # style.css + screenshots / demo GIF
-├── .streamlit/config.toml  # dark theme + upload limit
+├── assets/                 # screenshots / demo GIF
+├── .streamlit/config.toml  # light/dark theme + upload limit
 ├── .vscode/                # VS Code run + test config
 ├── Dockerfile  docker-compose.yml  .dockerignore
 ├── NOTICE  THIRD_PARTY_LICENSES.md  LICENSE
@@ -134,7 +134,7 @@ docmind-rag/
 └── README.md
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/docmind-rag.git
@@ -163,7 +163,7 @@ docker compose up --build
 
 Accounts, chats and indexes are stored in the `docmind-data` volume, so they survive restarts.
 
-## 💡 How to Use
+## How to Use
 
 1. Create an account and log in.
 2. Open **Documents** in the sidebar, upload files (or paste a link), click **Build index**.
@@ -171,7 +171,7 @@ Accounts, chats and indexes are stored in the `docmind-data` volume, so they sur
 4. Pin important chats, start a **New chat** for other documents, switch any time from the sidebar.
 5. Open **View evidence** under an answer to see the exact pages used.
 
-## ⚙️ How It Works (Short Version)
+## How It Works (Short Version)
 
 1. **Ingest:** PDF → pages → overlapping chunks → vectors. Saved to disk per chat and loaded into FAISS + BM25.
 2. **Memory:** For follow-ups, the LLM rewrites your question into a standalone one using the last few messages.
@@ -183,7 +183,7 @@ Accounts, chats and indexes are stored in the `docmind-data` volume, so they sur
 
 **Why save vectors?** Reopening a chat loads `chunks.json` + `vectors.npy` and rebuilds the indexes. No PDF parsing or embedding again.
 
-## 📊 Evaluation
+## Evaluation
 
 Measure what hybrid search and re-ranking actually add on **your** documents (no Groq key needed):
 
@@ -196,7 +196,7 @@ Each question needs `must_contain` (text the right chunk must include) or `expec
 
 <!-- Paste your real results table here after running it on a public sample PDF. -->
 
-## 🧪 Tests
+## Tests
 
 ```bash
 pytest
@@ -204,7 +204,7 @@ pytest
 
 Covers chunking, BM25, RRF, accounts, chat isolation between users, pinning, cascade delete, and save / load of an index.
 
-## 🔧 Configuration
+## Configuration
 
 All defaults live in `docmind/config.py`. Override the common ones in `.env`:
 
@@ -215,7 +215,7 @@ All defaults live in `docmind/config.py`. Override the common ones in `.env`:
 | `CHUNK_SIZE` | `800` | Characters per chunk |
 | `CHUNK_OVERLAP` | `100` | Overlap between chunks |
 
-## 🔒 Privacy and Security
+## Privacy and Security
 
 - Passwords and recovery codes are stored only as salted PBKDF2-SHA256 hashes.
 - Changing or resetting a password logs out every other device. The lockout is per username, so someone could deliberately lock a known username for 15 minutes. That is the trade-off for stopping password guessing.
@@ -224,30 +224,30 @@ All defaults live in `docmind/config.py`. Override the common ones in `.env`:
 - Deleting a chat deletes its messages and its saved index.
 - "Stay logged in" uses a random token in a browser cookie (30 days). Only a hash of the token is stored on the server, and logout invalidates it immediately. The cookie is set from JavaScript, so it cannot be `HttpOnly`. Use HTTPS if you deploy publicly (the `Secure` flag is added automatically on https).
 
-## ⚖️ Licenses
+## Licenses
 
 - This project: MIT (see `LICENSE`).
 - **Built with Llama.** Llama 3.3 is under the Llama 3.3 Community License and Meta's Acceptable Use Policy.
 - Other components are listed in `THIRD_PARTY_LICENSES.md`. Verify each one before commercial use.
 
-## ⚠️ Known Limitations
+## Known Limitations
 
 - OCR is optional, slower, and limited to 50 pages per file. Handwriting and low-quality scans can give wrong text.
 - Password reset needs your saved recovery code (there is no email service). Lose both password and code and the account cannot be recovered.
 - Web-link download checks the address before connecting, but a determined DNS-rebinding attack is not fully ruled out. Keep the URL feature behind login (it is) and run the app without access to internal networks.
 
-## 🗺️ Roadmap
+## Roadmap
 
 - [ ] Email-based password reset (needs an email service)
 - [ ] Streaming answers
 - [ ] Local LLM option (Ollama) for fully private use
 - [ ] FastAPI endpoint and embeddable widget
 
-## 👤 Author
+## Author
 
 **Mustafa Amjad**
 [LinkedIn](https://www.linkedin.com/in/mustafaamjad9)
 
-## 📜 License
+## License
 
 MIT. See [LICENSE](LICENSE).

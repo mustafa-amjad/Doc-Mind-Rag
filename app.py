@@ -1,6 +1,5 @@
 """DocMind: Streamlit UI with login, saved chats, pinned chats and chat memory.
 Run with:  streamlit run app.py"""
-import html  # escapes text so file names / PDF text can never break our HTML
 import re  # used to clean whitespace in snippets
 import shutil  # deletes a chat's saved index folder
 from pathlib import Path  # builds file paths that work on Windows and Mac
@@ -9,38 +8,34 @@ import streamlit as st
 
 from docmind import auth, config, cookies, db, ocr
 from docmind.embedder import Embedder
-from docmind.llm import LLM
+from docmind.llm import LLM, friendly_error
 from docmind.loader import SUPPORTED_TYPES, fetch_url
 from docmind.pipeline import RAGPipeline
 from docmind.reranker import Reranker
 
-ROOT = Path(__file__).parent  # folder where app.py lives
 DEFAULT_TITLE = "New chat"
 
 st.set_page_config(  # must be the FIRST Streamlit call
-    page_title="DocMind · Document Intelligence",
-    page_icon="📄",
+    page_title="DocMind",
+    page_icon=":material/description:",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 SUGGESTIONS = [  # one-click starter questions shown after indexing
-    "Summarize this document in 5 bullet points",
-    "What are the key takeaways?",
-    "List any important dates, numbers or names",
+    "Summarize the main points",
+    "What are the key findings?",
+    "List important dates, figures and names",
 ]
+USER_AVATAR = ":material/person:"
+ASSISTANT_AVATAR = ":material/description:"
+_MD_SPECIAL = re.compile(r"([\\`*_{}\[\]()#+\-.!|<>~$:])")  # characters Streamlit markdown would interpret
 
 
 # ====================== small helpers ======================
-def load_css() -> None:
-    """Read assets/style.css and inject it into the page."""
-    css = (ROOT / "assets" / "style.css").read_text(encoding="utf-8")
-    st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
-
-
-def esc(value) -> str:
-    """Safe-for-HTML version of any value."""
-    return html.escape(str(value))
+def md_escape(value) -> str:
+    """Make any text (file names, PDF passages) safe to show inside Streamlit markdown."""
+    return _MD_SPECIAL.sub(r"\\\1", str(value))
 
 
 def shorten(text: str, limit: int = 220) -> str:
@@ -51,7 +46,7 @@ def shorten(text: str, limit: int = 220) -> str:
     return text[:limit].rsplit(" ", 1)[0] + "…"  # cut, drop the half-word, add dots
 
 
-@st.cache_resource(show_spinner="Loading AI models (first run only)...")
+@st.cache_resource(show_spinner="Loading models (first run only)...")
 def load_models():
     """Heavy models load ONCE and are shared by every browser session."""
     return Embedder(config.EMBED_MODEL), Reranker(config.RERANK_MODEL), LLM(config.GROQ_API_KEY, config.LLM_MODEL)
@@ -63,43 +58,36 @@ def index_folder(user_id: int, chat_id: int) -> Path:
 
 
 # ====================== rendering helpers ======================
-def source_chips(sources: list[dict]) -> str:
-    """Small pills like 'report.pdf · p.3' (one per unique file+page)."""
-    seen, chips = set(), []
+def unique_pages(sources: list[dict]) -> list[str]:
+    """'report.pdf, p. 3' once per file+page, in the order they were cited."""
+    seen, labels = set(), []
     for src in sources:
         key = (src["source"], src["page"])
-        if key in seen:  # skip duplicates
-            continue
-        seen.add(key)
-        chips.append(f'<span class="chip cyan">📄 {esc(src["source"])} · p.{esc(src["page"])}</span>')
-    return f'<div class="chips">{"".join(chips)}</div>'
-
-
-def evidence_html(sources: list[dict]) -> str:
-    """Compact evidence list. Each passage is cut short, full text hides in a <details> toggle."""
-    rows = []
-    for number, src in enumerate(sources, start=1):
-        score = f'<span class="chip muted">match {src["rerank_score"]:.2f}</span>' if "rerank_score" in src else ""
-        score += ' <span class="chip">🔍 OCR</span>' if src.get("ocr") else ""  # text came from a scan
-        rows.append(
-            f'<div class="src">'
-            f'<div class="src-head"><span class="src-num">{number}</span>'
-            f'{esc(src["source"])} · page {esc(src["page"])} {score}</div>'
-            f'<div class="src-snippet">{esc(shorten(src["text"]))}</div>'
-            f'<details><summary>Read full passage</summary><p>{esc(src["text"])}</p></details>'
-            f"</div>"
-        )
-    return "".join(rows)
+        if key not in seen:
+            seen.add(key)
+            labels.append(f"{src['source']}, p. {src['page']}")
+    return labels
 
 
 def render_answer_extras(sources: list[dict], meta: str, searched: str = "", question: str = "") -> None:
-    """Chips + speed badge + collapsed evidence box. Used for new AND old messages."""
-    badges = [f'<span class="chip muted">⚡ {esc(meta)}</span>']
-    if searched and searched.strip().lower() != question.strip().lower():  # show when memory rewrote the question
-        badges.append(f'<span class="chip">🔁 Understood as: {esc(shorten(searched, 90))}</span>')
-    st.markdown(source_chips(sources) + f'<div class="chips">{"".join(badges)}</div>', unsafe_allow_html=True)
-    with st.expander(f"View evidence · {len(sources)} passages", expanded=False):  # collapsed by default
-        st.markdown(evidence_html(sources), unsafe_allow_html=True)
+    """Citations + timing + collapsed evidence. Used for new AND old messages."""
+    cited = " · ".join(md_escape(label) for label in unique_pages(sources))
+    details = md_escape(meta)
+    if searched and searched.strip().lower() != question.strip().lower():  # memory rewrote the question
+        details += f"  \nSearched for: “{md_escape(shorten(searched, 120))}”"
+    st.caption(f":material/menu_book: {cited}  \n{details}")
+    with st.expander(f"Evidence ({len(sources)} passages)", icon=":material/format_quote:"):
+        for number, src in enumerate(sources, start=1):
+            with st.container(border=True):
+                with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+                    st.markdown(f"**{number}.** {md_escape(src['source'])}, page {md_escape(src['page'])}")
+                    if "rerank_score" in src:
+                        st.badge(f"score {src['rerank_score']:.2f}", color="gray",
+                                 help="Cross-encoder re-rank score. Higher means more relevant.")
+                    if src.get("ocr"):
+                        st.badge("OCR", icon=":material/document_scanner:", color="orange",
+                                 help="Read from a scanned page; may contain recognition errors.")
+                st.caption(md_escape(shorten(src["text"], 1200)))
 
 
 def chat_to_markdown(title: str, messages: list[dict]) -> str:
@@ -116,56 +104,38 @@ def chat_to_markdown(title: str, messages: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def hero() -> None:
-    st.markdown(
-        """
-        <div class="hero">
-          <div class="hero-badge">Document Intelligence</div>
-          <h1>Doc<span>Mind</span></h1>
-          <p>Ask questions across your documents and get answers backed by the exact pages they came from.</p>
-          <div class="chips">
-            <span class="chip">🔎 Hybrid search</span>
-            <span class="chip">🧠 Cross-encoder re-ranking</span>
-            <span class="chip">💾 Saved chats</span>
-            <span class="chip">🦙 Built with Llama</span>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+def page_header() -> None:
+    """Title block for the sign-in screens."""
+    st.space("large")
+    st.title("DocMind", anchor=False)
+    st.caption("Ask questions about your documents and get answers with page-level citations.")
 
 
-def steps(ready: bool) -> None:
-    """3-step guide. The current step is highlighted."""
-    st.markdown(
-        f"""
-        <div class="step-grid">
-          <div class="step-card {'active' if not ready else 'done'}"><div class="step-num">1</div>
-            <div class="step-title">Upload</div><div class="step-text">Open <b>Documents</b> in the sidebar. Add PDF, Word, TXT or a web link.</div></div>
-          <div class="step-card"><div class="step-num">2</div>
-            <div class="step-title">Build index</div><div class="step-text">We read, chunk and embed them once. Saved with this chat.</div></div>
-          <div class="step-card {'active' if ready else ''}"><div class="step-num">3</div>
-            <div class="step-title">Ask</div><div class="step-text">Chat normally. Follow-up questions work too.</div></div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+def getting_started() -> None:
+    """Empty state: what to do before the first question."""
+    with st.container(border=True):
+        st.markdown("**Add documents to this chat**")
+        st.caption("Open **Documents** in the sidebar, upload files or paste a link, then build the index.")
+        steps = [
+            (":material/upload_file:", "Upload", "PDF, Word, text, Markdown, HTML or a public web link."),
+            (":material/database:", "Index", "Documents are chunked and embedded once, then saved with the chat."),
+            (":material/forum:", "Ask", "Answers cite the file and page. Follow-up questions keep context."),
+        ]
+        for column, (icon, title, text) in zip(st.columns(3), steps):
+            column.markdown(f"{icon} **{title}**")
+            column.caption(text)
 
 
-def stat_cards(stats: dict) -> None:
-    st.markdown(
-        f"""
-        <div class="stat-grid">
-          <div class="stat-card"><div class="stat-label">Files</div><div class="stat-value">{stats['files']}</div></div>
-          <div class="stat-card"><div class="stat-label">Pages</div><div class="stat-value">{stats['pages']}</div></div>
-          <div class="stat-card"><div class="stat-label">Chunks</div><div class="stat-value">{stats['chunks']}</div></div>
-          <div class="stat-card"><div class="stat-label">Index</div><div class="stat-value accent">{esc(stats['index']).upper()}</div></div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    chips = "".join(f'<span class="chip">📄 {esc(name)}</span>' for name in stats.get("names", []))
-    st.markdown(f'<div class="chips">{chips}</div>', unsafe_allow_html=True)
+def knowledge_base(stats: dict) -> None:
+    """Indexed document summary for the current chat."""
+    cols = st.columns(4)
+    cols[0].metric("Files", stats["files"], border=True)
+    cols[1].metric("Pages", stats["pages"], border=True)
+    cols[2].metric("Chunks", stats["chunks"], border=True)
+    cols[3].metric("Index", str(stats["index"]).upper(), border=True)
+    names = stats.get("names", [])
+    if names:
+        st.caption(":material/folder_open: " + " · ".join(md_escape(name) for name in names))
 
 
 # ====================== session state: which user, which chat ======================
@@ -212,15 +182,15 @@ def logout() -> None:
 
 # ====================== login screen ======================
 def render_auth() -> None:
-    hero()
-    _, middle, _ = st.columns([1, 1.6, 1])
+    _, middle, _ = st.columns([1, 1.3, 1])
     with middle:
-        login_tab, signup_tab, forgot_tab = st.tabs(["🔐 Log in", "✨ Create account", "🔑 Forgot password"])
+        page_header()
+        login_tab, signup_tab, forgot_tab = st.tabs(["Sign in", "Create account", "Reset password"])
         with login_tab:
-            with st.form("login_form"):
+            with st.form("login_form", border=False):
                 username = st.text_input("Username", key="login_user")
                 password = st.text_input("Password", type="password", key="login_pass")
-                submitted = st.form_submit_button("Log in", type="primary", use_container_width=True)
+                submitted = st.form_submit_button("Sign in", type="primary", width="stretch")
             if submitted:
                 try:
                     user = auth.login(username, password)
@@ -232,13 +202,13 @@ def render_auth() -> None:
                         start_login(user)
                         st.rerun()
                     else:
-                        st.error("Wrong username or password.")
+                        st.error("Incorrect username or password.")
         with signup_tab:
-            with st.form("signup_form"):
-                new_user = st.text_input("Choose a username", key="signup_user")
-                new_pass = st.text_input("Choose a password (8+ characters)", type="password", key="signup_pass")
-                confirm = st.text_input("Repeat password", type="password", key="signup_confirm")
-                created = st.form_submit_button("Create account", type="primary", use_container_width=True)
+            with st.form("signup_form", border=False):
+                new_user = st.text_input("Username", key="signup_user")
+                new_pass = st.text_input("Password (at least 8 characters)", type="password", key="signup_pass")
+                confirm = st.text_input("Confirm password", type="password", key="signup_confirm")
+                created = st.form_submit_button("Create account", type="primary", width="stretch")
             if created:
                 if new_pass != confirm:
                     st.error("Passwords do not match.")
@@ -251,12 +221,12 @@ def render_auth() -> None:
                     except ValueError as error:
                         st.error(str(error))
         with forgot_tab:
-            st.caption("Enter the recovery code you saved when you created your account.")
-            with st.form("forgot_form"):
+            with st.form("forgot_form", border=False):
+                st.caption("Use the recovery code you saved when you created your account.")
                 forgot_user = st.text_input("Username", key="forgot_user")
                 forgot_code = st.text_input("Recovery code", key="forgot_code", placeholder="XXXXX-XXXXX-XXXXX-XXXXX")
-                forgot_pass = st.text_input("New password (8+ characters)", type="password", key="forgot_pass")
-                reset_clicked = st.form_submit_button("Reset password", type="primary", use_container_width=True)
+                forgot_pass = st.text_input("New password (at least 8 characters)", type="password", key="forgot_pass")
+                reset_clicked = st.form_submit_button("Reset password", type="primary", width="stretch")
             if reset_clicked:
                 try:
                     reset_user = auth.reset_password(forgot_user, forgot_code, forgot_pass)
@@ -265,21 +235,21 @@ def render_auth() -> None:
                     st.rerun()
                 except ValueError as error:
                     st.error(str(error))
-        st.caption("Your chats and indexed document text are saved on this server, under your account only.")
+        st.caption(":material/lock: Chats and indexed document text are stored on this server under your account.")
 
 
 def render_recovery_code_screen(code: str) -> None:
     """Shown once after signup / reset / new code. Nothing else works until the user confirms."""
-    hero()
-    _, middle, _ = st.columns([1, 1.6, 1])
+    _, middle, _ = st.columns([1, 1.3, 1])
     with middle:
-        st.markdown('<div class="section-title">Save your recovery code</div>', unsafe_allow_html=True)
-        st.warning("This is the ONLY way to reset your password if you forget it. It is shown just once. "
-                   "Keep it in a password manager.")
+        page_header()
+        st.subheader("Save your recovery code", anchor=False)
+        st.warning("This code is the only way to reset a forgotten password, and it is shown once. "
+                   "Store it in a password manager.", icon=":material/key:")
         st.code(code, language=None)
-        st.download_button("⬇️ Download as text file", data=f"DocMind recovery code: {code}\n",
-                           file_name="docmind_recovery_code.txt", use_container_width=True)
-        if st.button("I saved it. Continue", type="primary", use_container_width=True):
+        st.download_button("Download as text file", data=f"DocMind recovery code: {code}\n",
+                           file_name="docmind_recovery_code.txt", icon=":material/download:", width="stretch")
+        if st.button("I have saved it, continue", type="primary", width="stretch"):
             st.session_state.pop("new_recovery_code", None)
             st.rerun()
 
@@ -289,36 +259,35 @@ def chat_row(chat: dict, active: bool, user_id: int) -> None:
     """One line in Pinned / Recent: open button, pin button, delete button."""
     chat_id = chat["id"]
     if st.session_state.get("confirm_delete") == chat_id:  # second click: ask before deleting
-        st.caption(f"Delete “{shorten(chat['title'], 24)}”?")
+        st.caption(f"Delete “{md_escape(shorten(chat['title'], 28))}”?")
         yes, no = st.columns(2)
-        if yes.button("Yes, delete", key=f"yes_{chat_id}", use_container_width=True):
+        if yes.button("Delete", key=f"yes_{chat_id}", type="primary", width="stretch"):
             db.delete_chat(chat_id, user_id)
             shutil.rmtree(index_folder(user_id, chat_id), ignore_errors=True)  # remove saved index too
             if st.session_state.chat_id == chat_id:
                 new_chat()
             st.session_state.confirm_delete = None
             st.rerun()
-        if no.button("Cancel", key=f"no_{chat_id}", use_container_width=True):
+        if no.button("Cancel", key=f"no_{chat_id}", width="stretch"):
             st.session_state.confirm_delete = None
             st.rerun()
         return
-    open_col, pin_col, del_col = st.columns([0.66, 0.17, 0.17], gap="small")
-    icon = "📍" if chat["pinned"] else "💬"
-    if open_col.button(f"{icon} {shorten(chat['title'], 26)}", key=f"open_{chat_id}", use_container_width=True,
-                       type="primary" if active else "secondary"):
-        open_chat(chat_id)
-        st.rerun()
-    if pin_col.button("📌" if not chat["pinned"] else "✖️", key=f"pin_{chat_id}",
-                      help="Pin to top" if not chat["pinned"] else "Unpin", use_container_width=True):
-        db.set_pinned(chat_id, user_id, not chat["pinned"])
-        st.rerun()
-    if del_col.button("🗑️", key=f"del_{chat_id}", help="Delete chat", use_container_width=True):
-        st.session_state.confirm_delete = chat_id
-        st.rerun()
+    with st.container(horizontal=True, vertical_alignment="center", gap="xxsmall", wrap=False):
+        if st.button(shorten(chat["title"], 28), key=f"open_{chat_id}", width="stretch",
+                     type="secondary" if active else "tertiary"):
+            open_chat(chat_id)
+            st.rerun()
+        with st.popover("", icon=":material/more_vert:", type="tertiary", key=f"menu_{chat_id}"):
+            if st.button("Unpin" if chat["pinned"] else "Pin to top", key=f"pin_{chat_id}", type="tertiary",
+                         icon=":material/keep_off:" if chat["pinned"] else ":material/keep:"):
+                db.set_pinned(chat_id, user_id, not chat["pinned"])
+                st.rerun()
+            if st.button("Delete", key=f"del_{chat_id}", type="tertiary", icon=":material/delete:"):
+                st.session_state.confirm_delete = chat_id
+                st.rerun()
 
 
 # ====================== START ======================
-load_css()
 db.init_db()  # creates data/docmind.db and tables on first run
 cookies.apply_pending()  # write or clear the login cookie if a login/logout just happened
 
@@ -334,7 +303,8 @@ if st.session_state.get("new_recovery_code"):  # must see the code before using 
     st.stop()
 
 if not config.GROQ_API_KEY:  # no key -> stop early with a clear message
-    st.error("**GROQ_API_KEY is missing.** Copy `.env.example` to `.env`, add your key, then restart the app.")
+    st.error("**GROQ_API_KEY is not set.** Copy `.env.example` to `.env`, add your key, then restart the app.",
+             icon=":material/key_off:")
     st.stop()
 
 if "embedder" not in st.session_state:  # models are cached globally, we just keep handy references
@@ -350,23 +320,15 @@ chat_title = chat["title"] if chat else DEFAULT_TITLE
 
 # ====================== sidebar ======================
 with st.sidebar:
-    st.markdown(
-        '<div class="brand"><div class="brand-logo">📄</div>'
-        '<div><div class="brand-name">DocMind</div><div class="brand-tag">Chat with your documents</div></div></div>',
-        unsafe_allow_html=True,
-    )
-    chip_col, out_col = st.columns([0.68, 0.32], gap="small")
-    chip_col.markdown(
-        f'<div class="user-chip"><div class="user-avatar">{esc(user["username"][0].upper())}</div>'
-        f'<div><div class="user-name">{esc(user["username"])}</div><div class="user-sub">Signed in</div></div></div>',
-        unsafe_allow_html=True,
-    )
-    if out_col.button("Log out", use_container_width=True):
-        logout()
-        st.rerun()
+    with st.container(horizontal=True, vertical_alignment="center"):
+        st.markdown("#### :material/description: DocMind")
+        st.space("stretch")
+        if st.button("", icon=":material/logout:", type="tertiary", help="Sign out"):
+            logout()
+            st.rerun()
+    st.caption(f"Signed in as **{md_escape(user['username'])}**")
 
-    st.write("")
-    if st.button("＋ New chat", type="primary", use_container_width=True):
+    if st.button("New chat", icon=":material/add:", type="primary", width="stretch"):
         new_chat()
         st.rerun()
 
@@ -374,35 +336,36 @@ with st.sidebar:
     pinned = [c for c in chats if c["pinned"]]
     recent = [c for c in chats if not c["pinned"]]
     if pinned:
-        st.markdown('<div class="side-title">📌 Pinned</div>', unsafe_allow_html=True)
+        st.caption("**Pinned**")
         for item in pinned:
             chat_row(item, item["id"] == st.session_state.chat_id, user_id)
-    st.markdown('<div class="side-title">🕘 Recent chats</div>', unsafe_allow_html=True)
+    st.caption("**Recent**")
     if not recent:
-        st.caption("No chats yet. Upload a PDF to start one.")
+        st.caption("No chats yet. Upload a document to start one.")
     for item in recent:
         chat_row(item, item["id"] == st.session_state.chat_id, user_id)
 
-    st.markdown('<div class="side-title">This chat</div>', unsafe_allow_html=True)
-    with st.expander("📄 Documents", expanded=not pipeline.is_ready):
+    st.space("small")
+    with st.expander("Documents", icon=":material/folder:", expanded=not pipeline.is_ready):
         uploads = st.file_uploader("Files", type=SUPPORTED_TYPES, accept_multiple_files=True,
                                    label_visibility="collapsed", key=f"upload_{st.session_state.chat_id}",
                                    help="PDF, DOCX, TXT, MD or HTML")
-        link = st.text_input("…or paste a web page / PDF link", placeholder="https://example.com/page",
+        link = st.text_input("Or add a web page / PDF link", placeholder="https://example.com/page",
                              key=f"link_{st.session_state.chat_id}").strip()
         ocr_ready = ocr.is_available()
-        ocr_on = st.toggle("🔍 OCR scanned pages", value=ocr_ready, disabled=not ocr_ready,
-                           help=f"Reads PDF pages that are only pictures. Slower. Up to {config.MAX_OCR_PAGES} pages per file.")
+        ocr_on = st.toggle("OCR for scanned pages", value=ocr_ready, disabled=not ocr_ready,
+                           help=f"Reads PDF pages that contain only images. Slower; up to "
+                                f"{config.MAX_OCR_PAGES} pages per file.")
         if not ocr_ready:
             st.caption("OCR is not installed. Run `pip install -r requirements-ocr.txt` and restart.")
         add_mode = True
         if pipeline.is_ready:  # chat already has documents -> let the user choose
-            add_mode = st.radio("When building", ["Add to this chat", "Replace documents"], horizontal=False) \
-                == "Add to this chat"
-        label = "⚙️ Build index" if not pipeline.is_ready else "⚙️ Update index"
-        if st.button(label, type="primary", use_container_width=True,
+            add_mode = st.segmented_control("When building", ["Add to chat", "Replace all"], default="Add to chat",
+                                            key=f"mode_{st.session_state.chat_id}") != "Replace all"
+        label = "Build index" if not pipeline.is_ready else "Update index"
+        if st.button(label, icon=":material/database:", type="primary", width="stretch",
                      disabled=not (uploads or link)):
-            with st.spinner("Reading, chunking and embedding..." + (" OCR can take a while." if ocr_on else "")):
+            with st.spinner("Reading and indexing documents..." + (" OCR may take a while." if ocr_on else "")):
                 try:
                     files = [(f.name, f.getvalue()) for f in uploads]
                     if link:  # download the link (public sites only)
@@ -413,108 +376,108 @@ with st.sidebar:
                         st.session_state.chat_id = db.create_chat(user_id, title)
                     pipeline.save(index_folder(user_id, st.session_state.chat_id))  # keep the index for later
                     ocr_pages = st.session_state.stats.get("ocr_pages", 0)
-                    st.toast("Index saved. Ask your first question!" + (f" OCR read {ocr_pages} scanned pages." if ocr_pages else ""),
-                             icon="✅")
+                    st.toast("Index saved." + (f" {ocr_pages} scanned pages read with OCR." if ocr_pages else ""),
+                             icon=":material/check_circle:")
                     st.rerun()
                 except ValueError as error:  # friendly message instead of a crash
-                    st.error(str(error))
+                    st.error(str(error), icon=":material/error:")
 
-    with st.expander("⚙️ Retrieval settings"):
-        use_hybrid = st.toggle("Hybrid search", value=True, help="Combine keyword (BM25) and meaning (vector) search.")
-        use_rerank = st.toggle("Re-ranking", value=True, help="A cross-encoder re-orders results for higher accuracy.")
-        use_memory = st.toggle("Chat memory", value=True, help="Understand follow-up questions like 'and for gift cards?'")
-        top_k = st.slider("Passages sent to the AI", 1, 8, config.FINAL_K)
-    mode = ("Hybrid" if use_hybrid else "Vector") + (" + Re-rank" if use_rerank else "")
-    st.markdown(f'<div class="mode-note"><b>Active:</b> {mode} · top {top_k}</div>', unsafe_allow_html=True)
+    with st.expander("Retrieval settings", icon=":material/tune:"):
+        use_hybrid = st.toggle("Hybrid search", value=True, help="Combine keyword (BM25) and semantic (vector) search.")
+        use_rerank = st.toggle("Re-ranking", value=True, help="Re-order candidates with a cross-encoder for accuracy.")
+        use_memory = st.toggle("Chat memory", value=True, help="Resolve follow-up questions using earlier turns.")
+        top_k = st.slider("Passages sent to the model", 1, 8, config.FINAL_K)
+    mode = ("Hybrid" if use_hybrid else "Vector") + (" + re-rank" if use_rerank else "")
 
-    st.write("")
     st.download_button(
-        "⬇️ Export this chat",
+        "Export chat",
         data=chat_to_markdown(chat_title, st.session_state.messages),
         file_name="docmind_chat.md",
         mime="text/markdown",
-        use_container_width=True,
+        icon=":material/download:",
+        width="stretch",
         disabled=not st.session_state.messages,
     )
-    with st.expander("👤 Account"):
-        with st.form("change_password_form", clear_on_submit=True):
+    with st.expander("Account", icon=":material/manage_accounts:"):
+        with st.form("change_password_form", clear_on_submit=True, border=False):
             st.caption("Change password")
             old_pass = st.text_input("Current password", type="password")
-            new_pass_1 = st.text_input("New password (8+ characters)", type="password")
-            change_clicked = st.form_submit_button("Change password", use_container_width=True)
+            new_pass_1 = st.text_input("New password (at least 8 characters)", type="password")
+            change_clicked = st.form_submit_button("Change password", width="stretch")
         if change_clicked:
             try:
                 auth.change_password(user_id, old_pass, new_pass_1)
                 start_login(user)  # old logins were removed, so issue a fresh one for this browser
-                st.toast("Password changed. Other devices were logged out.", icon="✅")
+                st.toast("Password changed. Other devices were signed out.", icon=":material/check_circle:")
             except ValueError as error:
                 st.error(str(error))
-        with st.form("new_code_form", clear_on_submit=True):
+        with st.form("new_code_form", clear_on_submit=True, border=False):
             st.caption("New recovery code (the old one stops working)")
             code_pass = st.text_input("Your password", type="password", key="code_pass")
-            code_clicked = st.form_submit_button("Generate new code", use_container_width=True)
+            code_clicked = st.form_submit_button("Generate new code", width="stretch")
         if code_clicked:
             try:
                 st.session_state.new_recovery_code = auth.regenerate_recovery_code(user_id, code_pass)
                 st.rerun()
             except ValueError as error:
                 st.error(str(error))
-    st.markdown('<div class="side-foot">Built with Llama · Inference by Groq</div>', unsafe_allow_html=True)
+    st.caption(f"Retrieval: {mode}, top {top_k}  \nModel: {md_escape(config.LLM_MODEL)} via Groq")
 
 # ====================== main area ======================
-typed = st.chat_input("Ask anything about your documents...", disabled=not pipeline.is_ready)
+typed = st.chat_input("Ask a question about your documents", disabled=not pipeline.is_ready)
 question = st.session_state.pop("pending_question", None) or typed  # clicked suggestion wins over typed text
 
-head_col, rename_col = st.columns([0.8, 0.2])
-head_col.markdown(f'<div class="chat-header"><div class="chat-title">{esc(chat_title)}</div></div>',
-                  unsafe_allow_html=True)
-if chat:  # rename only makes sense for a saved chat
-    with rename_col.popover("✏️ Rename", use_container_width=True):
-        new_title = st.text_input("Chat name", value=chat_title, max_chars=60, key=f"rename_{chat['id']}")
-        if st.button("Save name", key=f"rename_save_{chat['id']}", type="primary"):
-            db.rename_chat(chat["id"], user_id, new_title.strip() or chat_title)
-            st.rerun()
+with st.container(horizontal=True, vertical_alignment="center"):
+    st.subheader(chat_title, anchor=False)
+    if chat:  # rename only makes sense for a saved chat
+        with st.popover("", icon=":material/edit:", type="tertiary", help="Rename chat"):
+            new_title = st.text_input("Chat name", value=chat_title, max_chars=60, key=f"rename_{chat['id']}")
+            if st.button("Save", key=f"rename_save_{chat['id']}", type="primary"):
+                db.rename_chat(chat["id"], user_id, new_title.strip() or chat_title)
+                st.rerun()
 
 if not pipeline.is_ready:  # nothing indexed yet -> show the guide
-    st.markdown('<div class="section-title">Get started</div>', unsafe_allow_html=True)
-    steps(ready=False)
+    getting_started()
 else:
-    st.markdown('<div class="section-title">Knowledge base</div>', unsafe_allow_html=True)
-    stat_cards(st.session_state.stats)
-    st.markdown('<div class="section-title">Conversation</div>', unsafe_allow_html=True)
+    knowledge_base(st.session_state.stats)
 
 previous_user_question = ""
 for message in st.session_state.messages:  # redraw history on every rerun
-    with st.chat_message(message["role"], avatar="🧑‍💻" if message["role"] == "user" else "📄"):
+    is_user = message["role"] == "user"
+    with st.chat_message(message["role"], avatar=USER_AVATAR if is_user else ASSISTANT_AVATAR):
         st.markdown(message["content"])
-        if message["role"] == "user":
+        if is_user:
             previous_user_question = message["content"]
         elif message.get("sources"):
             render_answer_extras(message["sources"], message["meta"], message.get("searched", ""),
                                  previous_user_question)
 
 if pipeline.is_ready and not st.session_state.messages and not question:  # empty chat -> offer starters
-    st.caption("Try one of these:")
-    columns = st.columns(len(SUGGESTIONS))
-    for column, suggestion in zip(columns, SUGGESTIONS):
-        if column.button(suggestion, use_container_width=True):
-            st.session_state.pending_question = suggestion  # saved, picked up on the next run
-            st.rerun()
+    st.caption("Suggested questions")
+    with st.container(horizontal=True, gap="small"):
+        for suggestion in SUGGESTIONS:
+            if st.button(suggestion, icon=":material/arrow_outward:", icon_position="right"):
+                st.session_state.pending_question = suggestion  # saved, picked up on the next run
+                st.rerun()
 
 if question and st.session_state.chat_id:
     chat_id = st.session_state.chat_id
     history = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages] if use_memory else []
+    with st.chat_message("user", avatar=USER_AVATAR):
+        st.markdown(question)
+    with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
+        with st.spinner("Searching your documents..."):
+            try:
+                result = pipeline.ask(question, use_hybrid, use_rerank, top_k, history)
+            except Exception as error:  # API key, rate limit, network... show it, keep the chat usable
+                st.error(friendly_error(error), icon=":material/error:")
+                st.stop()  # nothing is saved, so the user can simply ask again
+        st.markdown(result["answer"])
     if not st.session_state.messages:  # first question names the chat
         db.rename_chat(chat_id, user_id, shorten(question, 40))
-    db.add_message(chat_id, user_id, "user", question)  # save the question right away
+    db.add_message(chat_id, user_id, "user", question)
     st.session_state.messages.append({"role": "user", "content": question})
-    with st.chat_message("user", avatar="🧑‍💻"):
-        st.markdown(question)
-    with st.chat_message("assistant", avatar="📄"):
-        with st.spinner("Searching your documents..."):
-            result = pipeline.ask(question, use_hybrid, use_rerank, top_k, history)
-        st.markdown(result["answer"])
-    meta = f"{result['total_ms'] / 1000:.1f}s total · retrieval {result['retrieve_ms']:.0f} ms · {mode}"
+    meta = f"{result['total_ms'] / 1000:.1f} s total · retrieval {result['retrieve_ms']:.0f} ms · {mode}"
     searched = result["search_query"]
     db.add_message(chat_id, user_id, "assistant", result["answer"], result["sources"], meta, searched)
     st.session_state.messages.append(
