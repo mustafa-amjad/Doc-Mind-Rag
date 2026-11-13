@@ -1,5 +1,7 @@
 # DocMind RAG
 
+**Live demo:** [docmind-mustafa.streamlit.app](https://docmind-mustafa.streamlit.app)
+
 **Chat with your PDFs. Get answers with page-level citations. Your chats are saved.**
 A production-style Retrieval-Augmented Generation (RAG) app with **hybrid search (BM25 + vector)**, **FAISS HNSW indexing**, **cross-encoder re-ranking**, **chat memory**, **user accounts**, and **saved / pinned chats**. Powered by **Groq (Llama 3.3 70B)** and **Streamlit**.
 
