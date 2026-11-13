@@ -23,3 +23,9 @@ data/uploads/*
 data/docmind.db
 data/indexes/
 eval/results.csv
+practice.ipynb
+
+# local virtual environment and old checkout (not part of the project)
+rag/
+venv/
+Doc Mind Rag/
