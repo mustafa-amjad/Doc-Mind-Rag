@@ -1,5 +1,9 @@
-"""Optional OCR for scanned PDFs (pages that have no text layer).
-Needs: pip install -r requirements-ocr.txt  (pure pip, no Tesseract install)."""
+"""Optional OCR for scanned PDFs (pages that have no usable text layer).
+Needs: pip install -r requirements-ocr.txt  (pure pip, no Tesseract install).
+
+Works with the maintained `rapidocr` package (v2/v3, supports Python 3.10-3.14) and
+falls back to the older `rapidocr_onnxruntime` package (Python <= 3.12) if that is
+what is installed."""
 import threading
 from functools import lru_cache
 
@@ -9,21 +13,49 @@ INSTALL_HINT = "OCR libraries are missing. Run: pip install -r requirements-ocr.
 _lock = threading.Lock()  # the OCR engine is not safe for two users at the same moment
 
 
+def _import_engine_class():
+    """Return the RapidOCR class from whichever package is installed, or None."""
+    try:
+        from rapidocr import RapidOCR  # current package name
+        return RapidOCR
+    except ImportError:
+        pass
+    try:
+        from rapidocr_onnxruntime import RapidOCR  # legacy package name
+        return RapidOCR
+    except ImportError:
+        return None
+
+
 def is_available() -> bool:
-    """True if both OCR libraries can be imported."""
+    """True if a PDF renderer and an OCR engine can be imported."""
     try:
         import pypdfium2  # noqa: F401  (renders PDF pages to images)
-        import rapidocr_onnxruntime  # noqa: F401  (reads text from images)
-        return True
     except ImportError:
         return False
+    return _import_engine_class() is not None
 
 
 @lru_cache(maxsize=1)
 def _engine():
     """Load the OCR model once and reuse it."""
-    from rapidocr_onnxruntime import RapidOCR
-    return RapidOCR()
+    engine_class = _import_engine_class()
+    if engine_class is None:
+        raise RuntimeError(INSTALL_HINT)
+    try:  # rapidocr >= 2 logs every model load at INFO; keep the server console clean
+        return engine_class(params={"Global.log_level": "warning"})
+    except TypeError:  # legacy package has no `params` argument
+        return engine_class()
+
+
+def _texts(result) -> list[str]:
+    """Pull the recognised lines out of either engine's result format."""
+    if result is None:
+        return []
+    if hasattr(result, "txts"):  # rapidocr >= 2: RapidOCROutput object
+        return [t for t in (result.txts or ()) if t]
+    lines = result[0] if isinstance(result, tuple) else result  # legacy: (lines, elapsed)
+    return [line[1] for line in (lines or []) if len(line) > 1 and line[1]]
 
 
 def ocr_pdf_pages(file_bytes: bytes, page_numbers: list[int]) -> dict[int, str]:
@@ -39,9 +71,15 @@ def ocr_pdf_pages(file_bytes: bytes, page_numbers: list[int]) -> dict[int, str]:
         with _lock:  # one OCR job at a time
             engine = _engine()
             for number in page_numbers:
-                image = pdf[number - 1].render(scale=config.OCR_SCALE).to_pil().convert("RGB")  # page -> picture
-                lines, _ = engine(np.array(image))  # list of [box, text, score] or None
-                results[number] = "\n".join(line[1] for line in (lines or [])).strip()
+                if not 1 <= number <= len(pdf):
+                    continue
+                page = pdf[number - 1]
+                try:
+                    bitmap = page.render(scale=config.OCR_SCALE)
+                    image = np.array(bitmap.to_pil().convert("RGB"))  # page -> picture
+                finally:
+                    page.close()
+                results[number] = "\n".join(_texts(engine(image))).strip()
     finally:
         pdf.close()
     return results

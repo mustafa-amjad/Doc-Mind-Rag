@@ -50,3 +50,4 @@ MAX_REDIRECTS = 3  # follow at most 3 redirects
 # ---- OCR (scanned PDFs) ----
 OCR_SCALE = 2.0  # render pages at 2x zoom before reading (sharper text)
 MAX_OCR_PAGES = 50  # per file, so one huge scan cannot freeze the server
+OCR_MIN_CHARS = 25  # pages with less extracted text than this are treated as scans

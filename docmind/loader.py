@@ -37,21 +37,31 @@ def split_sections(text: str, filename: str) -> list[dict]:
 # ---------------- one loader per format ----------------
 def load_pdf(file_bytes: bytes, filename: str, use_ocr: bool = False) -> list[dict]:
     """Return a list of {text, source, page}. Pages without a text layer are OCR'd if use_ocr is on."""
-    reader = PdfReader(io.BytesIO(file_bytes))  # open the PDF from memory (no temp file needed)
-    pages, empty = [], []  # good pages / page numbers that have no text
+    try:
+        reader = PdfReader(io.BytesIO(file_bytes))  # open the PDF from memory (no temp file needed)
+    except Exception as error:  # broken or encrypted file -> friendly message instead of a crash
+        raise ValueError(f"Could not read {filename}: {error}") from None
+    pages, needs_ocr = {}, []  # page number -> page dict / pages that look scanned
     for page_number, page in enumerate(reader.pages, start=1):  # start=1 so humans see page 1, not 0
-        text = (page.extract_text() or "").strip()  # extract_text can return None -> use "" instead
-        if not text:  # empty page (probably a scanned image)
-            empty.append(page_number)
-            continue
-        pages.append({"text": text, "source": filename, "page": page_number})
-    if use_ocr and empty:  # read the scanned pages as pictures
-        todo = empty[: config.MAX_OCR_PAGES]  # safety limit per file
-        for page_number, text in ocr_engine.ocr_pdf_pages(file_bytes, todo).items():
-            if text:
-                pages.append({"text": text, "source": filename, "page": page_number, "ocr": True})
-        pages.sort(key=lambda item: item["page"])  # keep reading order
-    return pages
+        try:
+            text = (page.extract_text() or "").strip()  # extract_text can return None -> use "" instead
+        except Exception:  # a single damaged page should not stop the whole file
+            text = ""
+        if len(text) < config.OCR_MIN_CHARS:  # empty or nearly empty (a scan with a stamp / page number)
+            needs_ocr.append(page_number)
+        if text:
+            pages[page_number] = {"text": text, "source": filename, "page": page_number}
+    if use_ocr and needs_ocr:  # read the scanned pages as pictures
+        todo = needs_ocr[: config.MAX_OCR_PAGES]  # safety limit per file
+        try:
+            scanned = ocr_engine.ocr_pdf_pages(file_bytes, todo)
+        except RuntimeError as error:  # OCR libraries missing
+            raise ValueError(str(error)) from None
+        for page_number, text in scanned.items():
+            current = pages.get(page_number, {}).get("text", "")
+            if text and len(text) > len(current):  # keep whichever version has more text
+                pages[page_number] = {"text": text, "source": filename, "page": page_number, "ocr": True}
+    return [pages[number] for number in sorted(pages)]  # keep reading order
 
 
 def load_docx(file_bytes: bytes, filename: str) -> list[dict]:

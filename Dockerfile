@@ -12,6 +12,7 @@ RUN pip install -r requirements.txt -r requirements-ocr.txt
 RUN python -c "from sentence_transformers import SentenceTransformer, CrossEncoder; \
 SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2'); \
 CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
+RUN python -c "from rapidocr import RapidOCR; RapidOCR()"
 
 COPY . .
 EXPOSE 8501

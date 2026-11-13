@@ -19,7 +19,7 @@ DocMind uses the open-source components below. Licenses listed are what each pro
 | Groq Python SDK | LLM API client | Apache 2.0 |
 | python-dotenv | Config | BSD-3-Clause |
 | pypdfium2 (optional OCR) | Renders PDF pages to images | Apache 2.0 / BSD-3 (PDFium). Verify on its page. |
-| rapidocr-onnxruntime (optional OCR) | Reads text from images | Apache 2.0 (includes OCR model files, verify their license too) |
+| rapidocr + onnxruntime (optional OCR) | Reads text from images | Apache 2.0 / MIT (rapidocr downloads PaddleOCR model files, Apache 2.0) |
 | Llama 3.3 70B (via Groq) | Answer generation | Llama 3.3 Community License + Meta Acceptable Use Policy. Show "Built with Llama" when you make a product available. |
 
 Using Groq's API is also subject to Groq's own Terms of Service and data policy.
