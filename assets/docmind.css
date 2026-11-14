@@ -1,0 +1,81 @@
+/* DocMind: page structure and motion on top of the theme in .streamlit/config.toml.
+   Selectors target keyed containers (.st-key-<key>) so they don't depend on Streamlit internals. */
+:root {
+  --dm-line: #e5e4e0;
+  --dm-line-2: #d9d8d3;
+  --dm-side: #f7f7f5;
+  --dm-hover: #efefec;
+  --dm-active: #e8e8e4;
+  --dm-accent: #0b5d45;
+  --dm-accent-soft: #e5f2ec;
+  --dm-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* ---------- page frame ---------- */
+[data-testid="stMainBlockContainer"] { padding-top: 1.5rem; }
+
+/* ---------- sidebar ---------- */
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 17px; letter-spacing: -0.01em; color: #1a1a19; }
+.brand .mark { width: 26px; height: 26px; border-radius: 7px; background: var(--dm-accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+.st-key-chat_list { border-top: 1px solid var(--dm-line); padding-top: 12px; margin-top: 4px; gap: 2px; }
+[class*="st-key-row_"] { overflow-x: hidden !important; border-radius: 8px; transition: background-color 0.15s ease; padding: 0 2px; }
+[class*="st-key-row_"]:hover { background: var(--dm-hover); }
+[class*="st-key-row_"][class*="_on"] { background: var(--dm-active); box-shadow: inset 3px 0 0 var(--dm-accent); }
+[class*="st-key-row_"] [data-testid^="stBaseButton"] { justify-content: flex-start; background: transparent; border-color: transparent; }
+[class*="st-key-row_"] [data-testid^="stBaseButton"] > div { justify-content: flex-start; }
+[class*="st-key-row_"] [data-testid^="stBaseButton"] p { text-align: left; }
+[class*="st-key-menu_"] { overflow: visible !important; flex-shrink: 0; }
+.st-key-account { position: sticky; bottom: 0; z-index: 2; background: var(--dm-side); border-top: 1px solid var(--dm-line); padding: 12px 0 8px; margin-top: 12px; }
+
+/* ---------- header bar ---------- */
+.st-key-topbar { border-bottom: 1px solid var(--dm-line); padding-bottom: 12px; gap: 12px; }
+.st-key-topbar h4 { margin: 0; padding: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw; }
+
+/* ---------- tabs ---------- */
+[role="tablist"] { gap: 4px; border-bottom: 1px solid var(--dm-line); }
+[data-testid="stTab"] { padding: 8px 12px; border-radius: 8px 8px 0 0; color: #5f5e5a; transition: color 0.15s ease, background-color 0.15s ease; }
+[data-testid="stTab"]:hover { background: var(--dm-hover); color: #1a1a19; }
+[data-testid="stTab"][aria-selected="true"] { color: var(--dm-accent); font-weight: 600; }
+[data-testid="stTabPanel"] { padding-top: 18px; animation: dm-fade 0.24s var(--dm-ease) both; }
+
+/* ---------- empty state: three steps in one panel ---------- */
+.st-key-steps { border: 1px solid var(--dm-line); border-radius: 12px; background: #fff; overflow: hidden; animation: dm-rise 0.36s var(--dm-ease) both; }
+.st-key-steps > div { flex: 1 1 0; min-width: 200px; }
+[class*="st-key-step_"] { padding: 20px 22px; gap: 6px; height: 100%; }
+.st-key-steps > div + div { border-left: 1px solid var(--dm-line); }
+.step-num { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 99px; background: var(--dm-accent-soft); color: var(--dm-accent); font-size: 12px; font-weight: 600; }
+
+/* ---------- conversation ---------- */
+[data-testid="stChatMessage"] { border: 1px solid var(--dm-line); border-radius: 12px; padding: 14px 16px; background: #fff; animation: dm-rise 0.32s var(--dm-ease) both; }
+.st-key-starters { animation: dm-rise 0.36s var(--dm-ease) both; }
+.st-key-starters [data-testid^="stBaseButton"] { border-radius: 99px; }
+
+/* ---------- source viewer ---------- */
+.st-key-viewer { position: sticky; top: 4rem; animation: dm-fade 0.3s var(--dm-ease) both; }
+.st-key-viewer_head { border-bottom: 1px solid var(--dm-line); padding-bottom: 10px; margin-bottom: 6px; gap: 2px; }
+.st-key-viewer img { border: 1px solid var(--dm-line); border-radius: 6px; box-shadow: 0 1px 3px rgba(20, 20, 18, 0.06); }
+
+/* ---------- documents tab ---------- */
+.st-key-stats { flex-wrap: wrap; }
+.st-key-stats > div { flex: 1 1 120px; }
+[data-testid="stMetric"] { transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+[data-testid="stMetric"]:hover { border-color: var(--dm-line-2); box-shadow: 0 1px 2px rgba(20, 20, 18, 0.05), 0 6px 18px rgba(20, 20, 18, 0.05); }
+.st-key-upload, .st-key-no_files, [data-testid="stDataFrame"] { animation: dm-rise 0.32s var(--dm-ease) both; }
+
+/* ---------- controls ---------- */
+[data-testid^="stBaseButton"] { transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease; }
+[data-testid^="stBaseButton"]:active:not(:disabled) { transform: scale(0.98); }
+div[role="dialog"] { animation: dm-pop 0.2s var(--dm-ease) both; }
+
+@keyframes dm-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes dm-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dm-pop { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 640px) {
+  .st-key-steps > div + div { border-left: 0; border-top: 1px solid var(--dm-line); }
+  .st-key-topbar h4 { max-width: 60vw; }
+  .st-key-viewer { position: static; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from docmind import auth, config, db, evidence
 from docmind.llm import LLM, friendly_error
 from docmind.loader import SUPPORTED_TYPES, fetch_url
-from docmind.pipeline import RAGPipeline
+from docmind.pipeline import RAGPipeline, how_read
 
 app = FastAPI(title="DocMind", docs_url="/api/docs", openapi_url="/api/openapi.json")
 db.init_db()
@@ -257,22 +257,6 @@ def recent_answers(user: dict = Depends(current_user)):
 
 
 # ---------------- documents ----------------
-def how_read(chunks: list[dict], name: str) -> list[str]:
-    mine = [c for c in chunks if c["source"] == name]
-    tags = []
-    if any("[Table]" in c["text"] for c in mine):
-        tags.append("Table")
-    if any(c.get("image") for c in mine):
-        tags.append("Picture")
-    if any(c.get("ocr") for c in mine):
-        tags.append("OCR")
-    # "Text" = the file has its own typed text (not only words read from scans or pictures)
-    typed = any(not c.get("ocr") and len(c["text"].split("[Image]")[0].strip()) > 40 for c in mine)
-    if typed or not tags:
-        tags.insert(0, "Text")
-    return tags
-
-
 @app.post("/api/workspaces/{workspace_id}/documents")
 def add_document(ctx: dict = Depends(own_workspace), file: UploadFile | None = File(None),
                  url: str = Form(""), ocr: bool = Form(True), describe: bool = Form(False)):
