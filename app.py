@@ -480,7 +480,7 @@ def render_documents(pipeline: RAGPipeline, user_id: int) -> None:
             st.dataframe(
                 file_rows(pipeline.chunks), hide_index=True, width="stretch",
                 column_config={
-                    "File": st.column_config.TextColumn("File", width="large"),
+                    "File": st.column_config.TextColumn("File", width="medium"),
                     "Pages": st.column_config.NumberColumn("Pages", width="small"),
                     "Passages": st.column_config.NumberColumn("Passages", width="small",
                                                               help="Searchable pieces the file was split into"),

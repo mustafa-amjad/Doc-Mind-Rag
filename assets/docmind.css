@@ -28,8 +28,18 @@
 .st-key-account { position: sticky; bottom: 0; z-index: 2; background: var(--dm-side); border-top: 1px solid var(--dm-line); padding: 12px 0 8px; margin-top: 12px; }
 
 /* ---------- header bar ---------- */
-.st-key-topbar { border-bottom: 1px solid var(--dm-line); padding-bottom: 12px; gap: 12px; }
-.st-key-topbar h4 { margin: 0; padding: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw; }
+.st-key-topbar { border-bottom: 1px solid var(--dm-line); padding-bottom: 12px; gap: 12px; flex-wrap: nowrap !important; }
+.st-key-topbar > div { flex-shrink: 0; }
+.st-key-topbar > div:first-child { flex: 0 1 auto; min-width: 0; }
+.st-key-topbar > div:first-child * { min-width: 0; max-width: 100%; }
+.st-key-topbar h4 { margin: 0; padding: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- narrower screens: side-by-side panels stack ---------- */
+@media (max-width: 1180px) {
+  [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]) { flex-wrap: wrap; row-gap: 16px; }
+  [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] { flex: 1 1 100% !important; width: 100% !important; min-width: 100% !important; }
+  .st-key-viewer { position: static; }
+}
 
 /* ---------- tabs ---------- */
 [role="tablist"] { gap: 4px; border-bottom: 1px solid var(--dm-line); }
@@ -73,7 +83,7 @@ div[role="dialog"] { animation: dm-pop 0.2s var(--dm-ease) both; }
 
 @media (max-width: 640px) {
   .st-key-steps > div + div { border-left: 0; border-top: 1px solid var(--dm-line); }
-  .st-key-topbar h4 { max-width: 60vw; }
+
   .st-key-viewer { position: static; }
 }
 @media (prefers-reduced-motion: reduce) {
