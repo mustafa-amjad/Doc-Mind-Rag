@@ -110,7 +110,9 @@ flowchart LR
 
 ```
 docmind-rag/
-├── app.py                  # Streamlit UI (entry point)
+├── server.py               # web app API (FastAPI) + serves the React front end
+├── web/                    # React + TypeScript front end (Vite)
+├── app.py                  # Streamlit UI (the original demo)
 ├── docmind/                # core package
 │   ├── config.py           # all settings in one place
 │   ├── db.py               # SQLite: users, chats, messages
@@ -125,6 +127,7 @@ docmind-rag/
 │   ├── hybrid.py           # Reciprocal Rank Fusion
 │   ├── reranker.py         # cross-encoder
 │   ├── llm.py              # question rewrite + answer generation
+│   ├── evidence.py         # finds the cited sentences and their place on the PDF page
 │   └── pipeline.py         # connects everything, save / load
 ├── scripts/evaluate.py     # Hit@k and MRR for 4 retrieval setups
 ├── eval/                   # example test questions
@@ -152,17 +155,32 @@ pip install -r requirements.txt   # includes OCR for scans, images and text in c
 cp .env.example .env             # Windows: copy .env.example .env
 # open .env and paste GROQ_API_KEY (free key: https://console.groq.com)
 
+# the web app (landing page, workspaces, source viewer)
+cd web && npm install && npm run build && cd ..
+uvicorn server:app --port 8000   # open http://localhost:8000
+
+# or the original Streamlit demo
 streamlit run app.py
 ```
 
-The first run downloads the embedding and re-ranker models (~100 MB). Then create an account, upload PDFs, and ask.
+The first run downloads the embedding and re-ranker models (~100 MB). Then create an account, add documents to a workspace, and ask.
+
+For front-end work, run `uvicorn server:app --port 8000` and `cd web && npm run dev` (http://localhost:5173 forwards `/api` to the server).
+
+### Web app
+
+- **Workspaces:** each holds its documents, index and every question asked, saved per account.
+- **Source viewer:** click a citation to see the real PDF page with the cited sentences highlighted. Scanned pages show the scan and the OCR text; Word, text and web sources show the passage with the sentences marked.
+- **Library:** drag-and-drop or paste a link, with per-file progress and how each file was read (Text, Table, Picture, OCR).
+- **Sign-in:** an HttpOnly session cookie that survives reloads (30 days), set by the server.
+- **API docs:** `http://localhost:8000/api/docs`.
 
 ### Docker
 
 ```bash
 cp .env.example .env             # add your GROQ_API_KEY
 docker compose up --build
-# open http://localhost:8501
+# open http://localhost:8000
 ```
 
 Accounts, chats and indexes are stored in the `docmind-data` volume, so they survive restarts.

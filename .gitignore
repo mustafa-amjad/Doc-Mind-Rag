@@ -1,6 +1,10 @@
 # secrets
 .env
 
+# web front end (built in Docker / by npm run build)
+web/node_modules/
+web/dist/
+
 # python
 __pycache__/
 *.pyc

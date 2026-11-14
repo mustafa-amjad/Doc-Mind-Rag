@@ -76,6 +76,12 @@ def normalize_citations(text: str) -> str:
     return re.sub(r"\[(\d+)†[^\]]*\]", r"[\1]", text)
 
 
+def reasoning_args(model: str) -> dict:
+    """gpt-oss spends its token budget on hidden reasoning; a short task needs only a little of it."""
+    # extra_body works with every groq SDK version (older ones have no reasoning_effort argument)
+    return {"extra_body": {"reasoning_effort": "low"}} if model.startswith("openai/gpt-oss") else {}
+
+
 def tidy_not_found(text: str) -> str:
     """'I couldn't find that... [1]' -> the plain sentence: a not-found reply has no source to cite."""
     if re.fullmatch(re.escape(NOT_FOUND.rstrip(".")) + r"\.?(\s*\[\d+\])*\.?", text.strip()):
@@ -121,9 +127,10 @@ class LLM:
                     {"role": "user", "content": f"Chat history:\n{transcript}\n\nLast question: {question}"},
                 ],
                 temperature=0,
-                max_tokens=120,  # a question is short
+                max_tokens=1024,  # room for reasoning models (gpt-oss, qwen) to think before the short question
+                **reasoning_args(self.model),
             )
-            rewritten = (response.choices[0].message.content or "").strip().strip('"')
+            rewritten = clean_model_text(response.choices[0].message.content).strip().strip('"')
             return rewritten or question  # empty reply -> keep the original
         except Exception:  # API hiccup must never break the chat, so fall back to the raw question
             return question
