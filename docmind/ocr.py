@@ -58,6 +58,34 @@ def _texts(result) -> list[str]:
     return [line[1] for line in (lines or []) if len(line) > 1 and line[1]]
 
 
+def images_available() -> bool:
+    """True if loose images (PNG/JPG, pictures inside PDF/DOCX) can be OCR'd. No PDF renderer needed."""
+    try:
+        import PIL  # noqa: F401
+    except ImportError:
+        return False
+    return _import_engine_class() is not None
+
+
+def ocr_images(images: list) -> list[str]:
+    """OCR a list of PIL images. Returns one text per image (empty string if nothing was read)."""
+    if not images:
+        return []
+    if not images_available():
+        raise RuntimeError(INSTALL_HINT)
+    import numpy as np
+
+    texts = []
+    with _lock:  # one OCR job at a time
+        engine = _engine()
+        for image in images:
+            try:
+                texts.append("\n".join(_texts(engine(np.array(image.convert("RGB"))))).strip())
+            except Exception:  # one unreadable picture should not stop the file
+                texts.append("")
+    return texts
+
+
 def ocr_pdf_pages(file_bytes: bytes, page_numbers: list[int]) -> dict[int, str]:
     """OCR the given 1-based page numbers. Returns {page_number: text}."""
     if not is_available():

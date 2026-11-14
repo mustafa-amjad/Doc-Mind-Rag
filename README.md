@@ -61,10 +61,12 @@ flowchart LR
 ## Features
 
 **Documents**
-- PDF, **DOCX**, **TXT/MD**, **HTML** files and **web links** (PDF or page). For non-PDF files the citation "page" is the section number
+- PDF, **DOCX**, **TXT/MD**, **HTML**, **images** (PNG, JPG, WEBP, BMP, GIF, multi-page TIFF) and **web links** (page, PDF, Word file or image). For non-PDF files the citation "page" is the section number
+- **Tables** in PDF, DOCX and HTML are kept row by row, with every value labelled by its column header (`Region: North | Sales: 120`), so table questions stay answerable after chunking
 - Web links are limited to public sites: localhost, private networks and cloud metadata addresses are blocked, redirects are re-checked, downloads are capped at 10 MB
 
-- **OCR for scanned PDFs** (optional, pure pip): pages without a text layer are rendered and read; evidence shows an "OCR" badge because scanned text can contain small errors
+- **OCR for scans and pictures** (optional, pure pip): scanned PDF pages, image files, and the words inside charts and screenshots embedded in PDF and Word files. Mixed PDFs (typed + scanned pages) are handled page by page. Tiny icons and repeated logos are skipped. Evidence shows "OCR" / "Picture" badges because recognised text can contain small errors
+- **AI description of charts and diagrams** (optional toggle): each picture is sent to a Groq vision model (`VISION_MODEL`, default `qwen/qwen3.8-27b`) and its description is indexed, so "what does the chart on page 4 show?" can be answered
 
 **Retrieval**
 - Hybrid search (BM25 + vectors) with RRF, optional cross-encoder re-ranking
@@ -93,8 +95,9 @@ flowchart LR
 |---|---|
 | UI | Streamlit + custom CSS |
 | Storage | SQLite (stdlib) + files on disk |
-| Document parsing | pypdf, python-docx, BeautifulSoup |
+| Document parsing | pypdf, pdfplumber (tables), python-docx, BeautifulSoup, Pillow |
 | OCR (optional) | pypdfium2 + RapidOCR (`rapidocr` + ONNX Runtime) |
+| Chart / diagram description (optional) | Groq vision model (`VISION_MODEL`) |
 | Chunking | LangChain `RecursiveCharacterTextSplitter` |
 | Embeddings | `sentence-transformers/all-MiniLM-L6-v2` |
 | Vector search | FAISS (Flat + HNSW) |
@@ -113,8 +116,8 @@ docmind-rag/
 │   ├── db.py               # SQLite: users, chats, messages
 │   ├── auth.py             # sign up / log in (PBKDF2) + login sessions
 │   ├── cookies.py          # read / write the 'stay logged in' cookie
-│   ├── loader.py           # PDF / DOCX / TXT / HTML / URL -> pages
-│   ├── ocr.py              # optional OCR for scanned PDFs
+│   ├── loader.py           # PDF / DOCX / TXT / HTML / images / URL -> pages (tables + pictures)
+│   ├── ocr.py              # optional OCR for scanned pages and pictures
 │   ├── chunker.py          # pages -> chunks
 │   ├── embedder.py         # text -> vectors
 │   ├── vector_store.py     # FAISS Flat / HNSW
@@ -145,7 +148,7 @@ cd docmind-rag
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-pip install -r requirements-ocr.txt   # optional: read scanned PDFs
+pip install -r requirements-ocr.txt   # optional: read scans, images and text in charts
 
 cp .env.example .env             # Windows: copy .env.example .env
 # open .env and paste GROQ_API_KEY (free key: https://console.groq.com)
@@ -234,7 +237,9 @@ All defaults live in `docmind/config.py`. Override the common ones in `.env`:
 
 ## Known Limitations
 
-- OCR is optional, slower, and limited to 50 pages per file. Handwriting and low-quality scans can give wrong text.
+- OCR is optional, slower, and limited to 50 scanned pages and 40 pictures per file. Handwriting and low-quality scans can give wrong text.
+- OCR copies the words in a picture; it does not understand a chart. For that, turn on AI description (up to 20 pictures per file, uses Groq quota, and the model can misread values, so check the original for exact numbers).
+- PDF tables are found from their ruling lines. Tables drawn without lines are read as plain text. Pictures inside HTML pages are represented by their alt text only.
 - Password reset needs your saved recovery code (there is no email service). Lose both password and code and the account cannot be recovered.
 - Web-link download checks the address before connecting, but a determined DNS-rebinding attack is not fully ruled out. Keep the URL feature behind login (it is) and run the app without access to internal networks.
 

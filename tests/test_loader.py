@@ -25,7 +25,7 @@ def test_docx_text_and_tables_are_read():
     doc.save(buffer)
     pages = loader.load_document(buffer.getvalue(), "policy.docx")
     joined = " ".join(p["text"] for p in pages)
-    assert "Refunds are allowed" in joined and "Plan | Premium" in joined
+    assert "Refunds are allowed" in joined and "Plan | Premium" in joined  # one-row table: plain row
 
 
 def test_html_keeps_main_text_and_drops_scripts_and_menus():
@@ -37,7 +37,7 @@ def test_html_keeps_main_text_and_drops_scripts_and_menus():
 
 def test_unsupported_extension():
     with pytest.raises(ValueError):
-        loader.load_document(b"data", "picture.png")
+        loader.load_document(b"data", "archive.zip")
 
 
 @pytest.mark.parametrize("url", [
@@ -85,6 +85,6 @@ def test_too_large_and_wrong_type(monkeypatch):
     monkeypatch.setattr(loader.requests, "get", lambda *a, **k: FakeResponse(headers={"Content-Type": "text/html"}, body=b"x" * 50))
     with pytest.raises(ValueError):
         loader.fetch_url("http://8.8.8.8/big")
-    monkeypatch.setattr(loader.requests, "get", lambda *a, **k: FakeResponse(headers={"Content-Type": "image/png"}, body=b"x"))
+    monkeypatch.setattr(loader.requests, "get", lambda *a, **k: FakeResponse(headers={"Content-Type": "application/zip"}, body=b"x"))
     with pytest.raises(ValueError):
         loader.fetch_url("http://8.8.8.8/pic")

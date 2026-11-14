@@ -87,6 +87,10 @@ def render_answer_extras(sources: list[dict], meta: str, searched: str = "", que
                     if src.get("ocr"):
                         st.badge("OCR", icon=":material/document_scanner:", color="orange",
                                  help="Read from a scanned page; may contain recognition errors.")
+                    if src.get("image"):
+                        st.badge("Picture", icon=":material/image:", color="violet",
+                                 help="This page includes text read from a picture (OCR) or an AI description "
+                                      "of a chart or diagram. Check the original for exact values.")
                 st.caption(md_escape(shorten(src["text"], 1200)))
 
 
@@ -117,7 +121,7 @@ def getting_started() -> None:
         st.markdown("**Add documents to this chat**")
         st.caption("Open **Documents** in the sidebar, upload files or paste a link, then build the index.")
         steps = [
-            (":material/upload_file:", "Upload", "PDF, Word, text, Markdown, HTML or a public web link."),
+            (":material/upload_file:", "Upload", "PDF, Word, text, Markdown, HTML, images or a public web link."),
             (":material/database:", "Index", "Documents are chunked and embedded once, then saved with the chat."),
             (":material/forum:", "Ask", "Answers cite the file and page. Follow-up questions keep context."),
         ]
@@ -150,6 +154,7 @@ def new_chat() -> None:
     st.session_state.pipeline = fresh_pipeline()
     st.session_state.stats = None
     st.session_state.confirm_delete = None
+    st.session_state.ingest_warnings = []
 
 
 def open_chat(chat_id: int) -> None:
@@ -165,6 +170,7 @@ def open_chat(chat_id: int) -> None:
     st.session_state.stats = pipeline.load(folder) if (folder / "chunks.json").exists() else None
     st.session_state.pipeline = pipeline
     st.session_state.confirm_delete = None
+    st.session_state.ingest_warnings = []
 
 
 def start_login(user: dict) -> None:
@@ -358,15 +364,20 @@ with st.sidebar:
     with st.expander("Documents", icon=":material/folder:", expanded=not pipeline.is_ready):
         uploads = st.file_uploader("Files", type=SUPPORTED_TYPES, accept_multiple_files=True,
                                    label_visibility="collapsed", key=f"upload_{st.session_state.chat_id}",
-                                   help="PDF, DOCX, TXT, MD or HTML")
+                                   help="PDF, DOCX, TXT, MD, HTML or an image (PNG, JPG, WEBP, BMP, GIF, TIFF)")
         link = st.text_input("Or add a web page / PDF link", placeholder="https://example.com/page",
                              key=f"link_{st.session_state.chat_id}").strip()
         ocr_ready = ocr.is_available()
-        ocr_on = st.toggle("OCR for scanned pages", value=ocr_ready, disabled=not ocr_ready,
-                           help=f"Reads PDF pages that contain only images. Slower; up to "
-                                f"{config.MAX_OCR_PAGES} pages per file.")
+        ocr_on = st.toggle("OCR for scans and pictures", value=ocr_ready, disabled=not ocr_ready,
+                           help=f"Reads scanned PDF pages, image files, and the words inside charts and screenshots "
+                                f"in PDF and Word files. Slower; up to {config.MAX_OCR_PAGES} scanned pages and "
+                                f"{config.MAX_IMAGES_PER_FILE} pictures per file.")
         if not ocr_ready:
             st.caption("OCR is not installed. Run `pip install -r requirements-ocr.txt` and restart.")
+        describe_on = st.toggle("Describe charts and diagrams with AI", value=False,
+                                help=f"Sends each picture to the Groq vision model ({config.VISION_MODEL}) and "
+                                     f"indexes its description, so questions about charts and diagrams can be "
+                                     f"answered. Up to {config.MAX_VISION_IMAGES} pictures per file; uses API quota.")
         add_mode = True
         if pipeline.is_ready:  # chat already has documents -> let the user choose
             add_mode = st.segmented_control("When building", ["Add to chat", "Replace all"], default="Add to chat",
@@ -374,22 +385,32 @@ with st.sidebar:
         label = "Build index" if not pipeline.is_ready else "Update index"
         if st.button(label, icon=":material/database:", type="primary", width="stretch",
                      disabled=not (uploads or link)):
-            with st.spinner("Reading and indexing documents..." + (" OCR may take a while." if ocr_on else "")):
+            slow = " Reading pictures may take a while." if (ocr_on or describe_on) else ""
+            with st.spinner("Reading and indexing documents..." + slow):
                 try:
                     files = [(f.name, f.getvalue()) for f in uploads]
                     if link:  # download the link (public sites only)
                         files.append(fetch_url(link))
-                    st.session_state.stats = pipeline.ingest(files, append=add_mode, ocr=ocr_on)
+                    st.session_state.stats = pipeline.ingest(files, append=add_mode, ocr=ocr_on,
+                                                             describe_images=describe_on)
                     if st.session_state.chat_id is None:  # first save: create the chat now
                         title = Path(files[0][0]).stem[:40] or DEFAULT_TITLE
                         st.session_state.chat_id = db.create_chat(user_id, title)
                     pipeline.save(index_folder(user_id, st.session_state.chat_id))  # keep the index for later
                     ocr_pages = st.session_state.stats.get("ocr_pages", 0)
-                    st.toast("Index saved." + (f" {ocr_pages} scanned pages read with OCR." if ocr_pages else ""),
-                             icon=":material/check_circle:")
+                    image_pages = st.session_state.stats.get("image_pages", 0)
+                    message = "Index saved."
+                    if ocr_pages:
+                        message += f" {ocr_pages} pages read with OCR."
+                    if image_pages:
+                        message += f" {image_pages} pages include text from pictures."
+                    st.toast(message, icon=":material/check_circle:")
+                    st.session_state.ingest_warnings = st.session_state.stats.get("warnings", [])
                     st.rerun()
                 except ValueError as error:  # friendly message instead of a crash
                     st.error(str(error), icon=":material/error:")
+        for warning in st.session_state.get("ingest_warnings", []):  # e.g. vision model unavailable
+            st.warning(warning, icon=":material/warning:")
 
     with st.expander("Retrieval settings", icon=":material/tune:"):
         use_hybrid = st.toggle("Hybrid search", value=True, help="Combine keyword (BM25) and semantic (vector) search.")

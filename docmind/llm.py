@@ -1,4 +1,6 @@
 """The LLM: rewrites follow-up questions and writes answers using ONLY the retrieved chunks."""
+import re
+
 import groq
 from groq import Groq
 
@@ -31,6 +33,33 @@ REWRITE_PROMPT = (
     "resolve words like 'it', 'that', 'they', 'the second one'. Do NOT answer it. "
     "If it is already standalone, return it unchanged. Output ONLY the question."
 )
+
+
+VISION_PROMPT = (
+    "You are indexing a picture from a document so it can be searched later. Describe it factually. "
+    "If it is a chart or graph: give the chart type, title, axis labels, units, each series, the key values "
+    "you can read, and the main trend or comparison. If it is a diagram or flowchart: list the parts and how "
+    "they connect, in order. If it is a table: write it out row by row. If it is a photo or screenshot: say "
+    "what it shows. Copy important visible text exactly. Never invent numbers you cannot read. "
+    "Plain text only, no preamble, at most 200 words."
+)
+
+
+def image_to_data_url(image) -> str:
+    """PIL image -> small JPEG data URL that a vision model accepts."""
+    import base64
+    import io
+
+    picture = image.convert("RGB")
+    picture.thumbnail((config.VISION_MAX_SIDE, config.VISION_MAX_SIDE))  # keeps aspect ratio, only shrinks
+    buffer = io.BytesIO()
+    picture.save(buffer, "JPEG", quality=85)
+    return "data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+def clean_model_text(text: str) -> str:
+    """Drop <think>...</think> reasoning that some models print before the answer."""
+    return re.sub(r"<think>.*?</think>", "", text or "", flags=re.DOTALL).strip()
 
 
 def build_context(chunks: list[dict]) -> str:
@@ -67,6 +96,21 @@ class LLM:
             return rewritten or question  # empty reply -> keep the original
         except Exception:  # API hiccup must never break the chat, so fall back to the raw question
             return question
+
+    def describe_image(self, image) -> str:
+        """Charts and diagrams: ask a vision model what the picture shows. Raises on API errors."""
+        if min(image.size) < 32:  # the API refuses tiny images
+            return ""
+        response = self.client.chat.completions.create(
+            model=config.VISION_MODEL,
+            messages=[{"role": "user", "content": [
+                {"type": "text", "text": VISION_PROMPT},
+                {"type": "image_url", "image_url": {"url": image_to_data_url(image)}},
+            ]}],
+            temperature=0,
+            max_tokens=600,
+        )
+        return clean_model_text(response.choices[0].message.content)
 
     def answer(self, question: str, chunks: list[dict], history: list[dict] | None = None) -> str:
         if not chunks:  # nothing retrieved -> do not waste an API call

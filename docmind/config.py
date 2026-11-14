@@ -51,3 +51,16 @@ MAX_REDIRECTS = 3  # follow at most 3 redirects
 OCR_SCALE = 2.0  # render pages at 2x zoom before reading (sharper text)
 MAX_OCR_PAGES = 50  # per file, so one huge scan cannot freeze the server
 OCR_MIN_CHARS = 25  # pages with less extracted text than this are treated as scans
+
+# ---- pictures inside documents (charts, screenshots, diagrams) ----
+MIN_IMAGE_PIXELS = 120  # skip icons, bullets and logos smaller than this (width AND height)
+MAX_IMAGES_PER_FILE = 40  # pictures inside one PDF/DOCX that get OCR'd, so a photo album cannot freeze the server
+MAX_IMAGE_FRAMES = 50  # pages read from one multi-page TIFF
+
+# ---- AI image description (charts and diagrams) via a Groq vision model ----
+VISION_MODEL = os.getenv("VISION_MODEL", "qwen/qwen3.8-27b")  # any Groq model that accepts images
+MAX_VISION_IMAGES = 20  # AI descriptions per file (each one is an API call)
+VISION_MAX_SIDE = 1280  # pictures are shrunk to this size before upload
+
+# ---- tables ----
+MAX_TABLE_PAGES = 300  # PDF pages scanned for tables (table detection is slow on huge files)

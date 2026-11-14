@@ -50,15 +50,41 @@ class RAGPipeline:
         self.store.add(vectors)
         self.keyword = KeywordIndex([c["text"] for c in chunks])
 
-    def ingest(self, files: list[tuple[str, bytes]], append: bool = False, ocr: bool = False) -> dict:
-        """files = [(filename, pdf_bytes), ...]. append=True adds to the existing documents."""
+    def _safe_describer(self, warnings: list[str]):
+        """Wrap the vision call so one API problem never stops indexing. After the first failure it stops
+        calling the API for the rest of this upload and leaves a warning for the UI."""
+        state = {"failed": False}
+
+        def describe(image) -> str:
+            if state["failed"]:
+                return ""
+            try:
+                return self.llm.describe_image(image)
+            except Exception as error:
+                state["failed"] = True
+                from docmind.llm import friendly_error  # imported here so tests do not need the groq package
+                message = friendly_error(error)
+                if "not available" in message or "error (HTTP 400)" in message:
+                    message = (f"Vision model '{config.VISION_MODEL}' could not read images. "
+                               "Set VISION_MODEL in .env to a Groq model that accepts images.")
+                warnings.append(f"AI image description was skipped: {message}")
+                return ""
+
+        return describe
+
+    def ingest(self, files: list[tuple[str, bytes]], append: bool = False, ocr: bool = False,
+               describe_images: bool = False) -> dict:
+        """files = [(filename, pdf_bytes), ...]. append=True adds to the existing documents.
+        ocr: read scanned pages and words in pictures. describe_images: let the AI explain charts/diagrams."""
+        warnings: list[str] = []
+        describe = self._safe_describer(warnings) if describe_images else None
         pages = []
         for filename, data in files:
-            pages.extend(load_document(data, filename, ocr))  # read every file (PDF, DOCX, TXT, HTML...)
+            pages.extend(load_document(data, filename, ocr, describe))  # every file (PDF, DOCX, images...)
         if not pages:  # all pages empty -> probably scanned images
             raise ValueError(
-                "No text found, even with OCR." if ocr
-                else "No text found. This looks like a scanned PDF: turn on OCR in the Documents panel."
+                (warnings[0] if warnings else "No text found, even with OCR.") if (ocr or describe_images)
+                else "No text found. This looks like a scanned PDF or an image: turn on OCR in the Documents panel."
             )
         new_chunks = chunk_pages(pages)  # cut into chunks
         if not new_chunks:
@@ -81,6 +107,8 @@ class RAGPipeline:
         self._build_indexes(chunks, vectors)
         stats = self.stats()
         stats["ocr_pages"] = sum(1 for page in pages if page.get("ocr"))  # shown in the UI message
+        stats["image_pages"] = sum(1 for page in pages if page.get("image"))
+        stats["warnings"] = warnings
         return stats
 
     # ---------------- save / load (this is what makes old chats usable again) ----------------
