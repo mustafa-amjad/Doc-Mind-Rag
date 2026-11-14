@@ -383,7 +383,7 @@ def chat_row(chat: dict, active: bool, user_id: int) -> None:
             st.session_state.confirm_delete = None
             st.rerun()
         return
-    with st.container(horizontal=True, vertical_alignment="center", gap="xxsmall", wrap=False):
+    with st.container(horizontal=True, vertical_alignment="center", gap="xxsmall", wrap=False, key=f"row_{chat_id}"):
         if st.button(shorten(chat["title"], 28), key=f"open_{chat_id}", width="stretch",
                      type="secondary" if active else "tertiary"):
             open_chat(chat_id)
@@ -537,7 +537,8 @@ flash = st.session_state.pop("flash", None)
 if flash:
     st.toast(flash, icon=":material/check_circle:")
 
-st.html("<style>[class*='st-key-menu_'] { overflow: visible !important; flex-shrink: 0; }</style>")  # no scrollbar under ⋮
+st.html("<style>[class*='st-key-menu_'] { overflow: visible !important; flex-shrink: 0; }"  # no scrollbar under ⋮
+        "[class*='st-key-row_'] { overflow-x: hidden !important; }</style>")
 
 with st.sidebar:
     st.markdown("### DocMind")
