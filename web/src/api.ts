@@ -42,6 +42,12 @@ export const api = {
   signup: (username: string, password: string) =>
     request<{ user: User; recovery_code: string }>("/api/auth/signup", { method: "POST", body: json({ username, password }) }),
   logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
+  changePassword: (current: string, next: string) =>
+    request<{ ok: boolean }>("/api/account/password", { method: "POST", body: json({ current, new: next }) }),
+  newRecoveryCode: (password: string) =>
+    request<{ recovery_code: string }>("/api/account/recovery-code", { method: "POST", body: json({ password }) }),
+  signOutOthers: () => request<{ ok: boolean }>("/api/account/sign-out-others", { method: "POST" }),
+  deleteAllData: () => request<{ deleted: number }>("/api/account/data", { method: "DELETE" }),
 
   workspaces: () => request<{ workspaces: Workspace[] }>("/api/workspaces").then((r) => r.workspaces),
   createWorkspace: (title: string) => request<Workspace>("/api/workspaces", { method: "POST", body: json({ title }) }),

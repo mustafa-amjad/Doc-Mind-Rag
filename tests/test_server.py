@@ -56,9 +56,9 @@ def test_requires_sign_in(client):
 def test_signup_sets_cookie_that_survives_a_new_client(client):
     body = sign_up(client)
     assert body["recovery_code"]
-    cookie = client.cookies.get(config.COOKIE_NAME)
+    cookie = client.cookies.get(config.WEB_COOKIE_NAME)
     assert cookie and client.get("/api/me").json()["user"]["username"] == "alice"
-    fresh = TestClient(client.app, cookies={config.COOKIE_NAME: cookie})  # a reload / new tab
+    fresh = TestClient(client.app, cookies={config.WEB_COOKIE_NAME: cookie})  # a reload / new tab
     assert fresh.get("/api/me").status_code == 200
 
 
@@ -139,3 +139,40 @@ def test_pick_sentences_ignores_weak_overlap():
     passage = "Refunds are allowed within 30 days of purchase. Shipping takes five days."
     assert evidence.pick_sentences(passage, "Refunds are allowed within 30 days. [1]") == ["Refunds are allowed within 30 days of purchase."]
     assert evidence.pick_sentences(passage, "I couldn't find that.") == []
+
+
+def test_change_password_keeps_this_browser_and_signs_out_others(client):
+    sign_up(client)
+    other = TestClient(client.app, cookies={config.WEB_COOKIE_NAME: client.cookies.get(config.WEB_COOKIE_NAME)})
+    bad = client.post("/api/account/password", json={"current": "wrong-password", "new": "newpassword22"})
+    assert bad.status_code == 400
+    ok = client.post("/api/account/password", json={"current": "longpassword1", "new": "newpassword22"})
+    assert ok.status_code == 200, ok.text
+    assert client.get("/api/me").status_code == 200  # fresh cookie for this browser
+    assert other.get("/api/me").status_code == 401  # the other device is signed out
+    client.post("/api/auth/logout")
+    assert client.post("/api/auth/login", json={"username": "alice", "password": "newpassword22"}).status_code == 200
+
+
+def test_recovery_code_and_sign_out_others(client):
+    sign_up(client)
+    assert client.post("/api/account/recovery-code", json={"password": "nope-nope-1"}).status_code == 400
+    code = client.post("/api/account/recovery-code", json={"password": "longpassword1"}).json()["recovery_code"]
+    assert code
+    other = TestClient(client.app, cookies={config.WEB_COOKIE_NAME: client.cookies.get(config.WEB_COOKIE_NAME)})
+    assert client.post("/api/account/sign-out-others").status_code == 200
+    assert client.get("/api/me").status_code == 200
+    assert other.get("/api/me").status_code == 401
+
+
+def test_delete_all_data_only_touches_own_workspaces(client):
+    sign_up(client, "alice")
+    mine = client.post("/api/workspaces", json={"title": "Mine"}).json()
+    client.post(f"/api/workspaces/{mine['id']}/documents", files={"file": ("policy.txt", TEXT)}, data={"ocr": "false"})
+    bob = TestClient(client.app)
+    sign_up(bob, "bob")
+    theirs = bob.post("/api/workspaces", json={"title": "Bob's"}).json()
+    assert client.delete("/api/account/data").json() == {"deleted": 1}
+    assert client.get("/api/workspaces").json()["workspaces"] == []
+    assert not (config.INDEX_DIR / "1" / str(mine["id"])).exists()
+    assert [w["id"] for w in bob.get("/api/workspaces").json()["workspaces"]] == [theirs["id"]]

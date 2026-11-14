@@ -21,12 +21,11 @@ export default function Landing() {
       </header>
 
       <section className="wrap hero-l">
-        <span className="pill pill-plain" style={{ height: 30, fontSize: 13 }}><span style={{ width: 8, height: 8, borderRadius: 99, background: "var(--accent)" }} />Every answer cites its page</span>
-        <h1>Answers you can <em>check.</em></h1>
-        <p>Ask questions about your policies, contracts and reports. DocMind answers only from your documents, shows the exact page it used, and tells you when the answer isn’t there.</p>
+        <h1>Ask your documents. See the page behind every answer.</h1>
+        <p>Upload policies, contracts and reports, then ask questions in plain language. DocMind answers only from your files, opens the page it used, and tells you when the answer isn’t there.</p>
         <div className="ctas">
           <Link className="btn btn-dark btn-lg" to={start}>Start free</Link>
-          <a className="btn btn-lg" href="#how">See how it works</a>
+          <a className="btn btn-lg" href="#how">How it works</a>
         </div>
       </section>
 
@@ -47,7 +46,7 @@ export default function Landing() {
             <div className="p-page">
               <div className="p-paper">
                 <span style={{ font: "600 11px var(--sans)", color: "var(--muted)" }}>handbook.pdf · page 3</span>
-                <span style={{ font: "600 15px Georgia, serif" }}>2. Returns and refunds</span>
+                <span style={{ font: "600 15px var(--sans)" }}>2. Returns and refunds</span>
                 <span><mark>You can return most items within 30 days of delivery.</mark> Items must be unworn and unwashed, with the original tags attached.</span>
                 <span>Refunds go back to the original payment method within 5 to 7 business days.</span>
               </div>
@@ -57,23 +56,23 @@ export default function Landing() {
       </section>
 
       <section id="how" className="wrap" style={{ paddingBottom: 96, display: "flex", flexDirection: "column", gap: 40 }}>
-        <h2 className="h2">Three steps. No prompt engineering.</h2>
+        <h2 className="h2">How it works</h2>
         <div className="steps3">
           <div className="card"><span className="num">01</span><h3>Add your documents</h3><p>PDF, Word, text, web pages and images. Scans are read with OCR, and tables keep their rows and columns.</p></div>
-          <div className="card"><span className="num">02</span><h3>Ask in plain English</h3><p>Keyword and meaning search find the right passage, and a re-ranker puts the best one first. Follow-up questions keep their context.</p></div>
+          <div className="card"><span className="num">02</span><h3>Ask a question</h3><p>Keyword and meaning search find the right passage, and a re-ranker puts the best one first. Follow-up questions keep their context.</p></div>
           <div className="card"><span className="num">03</span><h3>Check the source</h3><p>Every claim links to its file and page. If the documents don’t say it, DocMind says “I couldn’t find that”.</p></div>
         </div>
       </section>
 
       <section id="features" className="dark-band">
         <div className="wrap band">
-          <h2 className="h2">Built for answers people will act on.</h2>
+          <h2 className="h2">Features</h2>
           <div className="feature-grid">
             <div><h3>Page-level citations</h3><p>Open the page beside the answer, with the sentence highlighted.</p></div>
-            <div><h3>Honest when it doesn’t know</h3><p>No guessing. Questions built on a wrong fact get corrected from the source.</p></div>
+            <div><h3>Says when it doesn’t know</h3><p>No guessing. Questions built on a wrong fact get corrected from the source.</p></div>
             <div><h3>Reads tables, scans and charts</h3><p>Price tables, scanned notices and bar charts become searchable text.</p></div>
-            <div><h3>Hybrid search + re-ranking</h3><p>Exact terms like IDs and names, plus meaning, merged and re-ranked.</p></div>
-            <div><h3>Workspaces that remember</h3><p>Documents and answers are saved per workspace, so you can come back to them.</p></div>
+            <div><h3>Hybrid search and re-ranking</h3><p>Exact terms like IDs and names, plus meaning, merged and re-ranked.</p></div>
+            <div><h3>Workspaces</h3><p>Documents and answers are saved per workspace, so you can come back to them.</p></div>
             <div><h3>Export with sources</h3><p>Download a workspace’s questions and answers with every citation attached.</p></div>
           </div>
         </div>
@@ -82,7 +81,7 @@ export default function Landing() {
       <section id="security" className="wrap band">
         <div className="security">
           <div>
-            <h2 className="h2">Your documents stay yours.</h2>
+            <h2 className="h2">Security and privacy</h2>
             <p>[YOUR DATA POLICY: where documents are stored, which AI provider processes them, and how long they are kept.]</p>
           </div>
           <ul className="checks">
@@ -95,13 +94,13 @@ export default function Landing() {
       </section>
 
       <section id="pricing" className="wrap" style={{ paddingBottom: 96, display: "flex", flexDirection: "column", gap: 40 }}>
-        <h2 className="h2" style={{ textAlign: "center", alignSelf: "center" }}>Simple pricing</h2>
+        <h2 className="h2" style={{ textAlign: "center", alignSelf: "center" }}>Pricing</h2>
         <div className="prices">
           <div className="card price"><h3>Free</h3><span className="amount">$0</span><p>One workspace to try it with your own files. [YOUR LIMITS]</p><Link className="btn" to={start}>Start free</Link></div>
           <div className="card price featured">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><h3>Pro</h3><span className="pill" style={{ background: "var(--accent)", color: "#fff" }}>Most teams</span></div>
             <span className="amount">[YOUR PRICE]</span><p>Unlimited workspaces, OCR, chart reading and exports. [YOUR LIMITS]</p>
-            <Link className="btn" to={start} style={{ background: "var(--side-text)", borderColor: "var(--side-text)" }}>Upgrade to Pro</Link>
+            <Link className="btn" to={start} style={{ background: "var(--deep-text)", borderColor: "var(--deep-text)", color: "var(--ink)" }}>Upgrade to Pro</Link>
           </div>
           <div className="card price"><h3>Team</h3><span className="amount">[YOUR PRICE]</span><p>Shared workspaces, roles and private hosting. [YOUR LIMITS]</p><a className="btn" href="mailto:[YOUR EMAIL]">Talk to us</a></div>
         </div>
@@ -109,7 +108,7 @@ export default function Landing() {
 
       <section className="wrap" style={{ paddingBottom: 96 }}>
         <div className="cta-band">
-          <h2>Stop searching PDFs. Start checking answers.</h2>
+          <h2>Try DocMind with your own files.</h2>
           <Link className="btn btn-lg" to={start}>Start free</Link>
         </div>
       </section>

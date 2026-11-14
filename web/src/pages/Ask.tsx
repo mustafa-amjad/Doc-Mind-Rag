@@ -147,7 +147,7 @@ function Viewer({ workspaceId, answer, index, onPick, onClose, open }: {
         </>
       ) : (
         <div className="viewer-body">
-          <div className="viewer-empty"><Doc size={22} />The page behind each answer appears here. Click a numbered citation to see it.</div>
+          <div className="viewer-empty"><Doc size={22} />Select a numbered citation to see the page it came from.</div>
         </div>
       )}
     </aside>

@@ -1,27 +1,27 @@
-# Same design system as the web app (web/src/styles.css): warm paper, near-black sidebar,
-# one emerald accent, Instrument Serif headings over Inter. One look only (no dark-mode switch).
+# Same design system as the web app (web/src/styles.css): one sans typeface (Geist) for
+# everything, white page, a sidebar one shade darker (no dark/light split), emerald accent.
 [theme]
 base = "light"
-font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
-headingFont = "'Instrument Serif':https://fonts.googleapis.com/css2?family=Instrument+Serif&display=swap"
-codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+font = "Geist:https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap"
+headingFont = "Geist:https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap"
+codeFont = "'Geist Mono':https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&display=swap"
 baseFontSize = 15
 baseRadius = "10px"
 buttonRadius = "10px"
 showWidgetBorder = true
-showSidebarBorder = false
+showSidebarBorder = true
 linkUnderline = false
-headingFontSizes = ["44px", "30px", "24px", "18px", "15px", "13px"]
-headingFontWeights = [400, 400, 400, 500, 500, 500]
+headingFontSizes = ["28px", "22px", "18px", "16px", "15px", "13px"]
+headingFontWeights = [600, 600, 600, 600, 500, 500]
 
 primaryColor = "#0B5D45"
-backgroundColor = "#F6F5F1"
-secondaryBackgroundColor = "#FFFFFF"
-codeBackgroundColor = "#EFEDE7"
-textColor = "#141412"
-borderColor = "#DAD6CD"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F4F4F2"
+codeBackgroundColor = "#F4F4F2"
+textColor = "#1A1A19"
+borderColor = "#E5E4E0"
 linkColor = "#0B5D45"
-grayColor = "#66645E"
+grayColor = "#5F5E5A"
 greenColor = "#0B5D45"
 greenBackgroundColor = "#E5F2EC"
 greenTextColor = "#0B5D45"
@@ -33,12 +33,12 @@ orangeColor = "#9A3412"
 orangeBackgroundColor = "#F7E7A1"
 
 [theme.sidebar]
-backgroundColor = "#141412"
-secondaryBackgroundColor = "#1D1C19"
-codeBackgroundColor = "#1D1C19"
-textColor = "#EDEBE6"
-borderColor = "#2E2D29"
-grayColor = "#A9A69E"
+backgroundColor = "#F7F7F5"
+secondaryBackgroundColor = "#EDEDEA"
+codeBackgroundColor = "#EDEDEA"
+textColor = "#1A1A19"
+borderColor = "#E5E4E0"
+grayColor = "#5F5E5A"
 primaryColor = "#0B5D45"
 
 [server]

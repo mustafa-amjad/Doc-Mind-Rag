@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useMatch, useNavigate } from "react-router-dom";
 import { api, chipColor, initials } from "../api";
-import { Book, Chat, Chevron, Gear, Home as HomeIcon, LogOut, Plus } from "../icons";
+import { Book, Chat, Chevron, Gear, Home as HomeIcon, Plus } from "../icons";
 import { useSession } from "../session";
 
 /** Modal that creates a workspace and opens its Library. */
@@ -45,8 +45,7 @@ export function NewWorkspace({ onClose }: { onClose: () => void }) {
 export type ShellContext = { openNewWorkspace: () => void };
 
 export default function Shell() {
-  const { user, workspaces, setUser } = useSession();
-  const navigate = useNavigate();
+  const { user, workspaces } = useSession();
   const wsMatch = useMatch("/app/w/:id/*");
   const currentId = wsMatch ? Number(wsMatch.params.id) : workspaces[0]?.id;
   const current = workspaces.find((w) => w.id === currentId);
@@ -59,12 +58,6 @@ export default function Shell() {
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
-
-  const signOut = async () => {
-    await api.logout().catch(() => undefined);
-    setUser(null);
-    navigate("/");
-  };
 
   const context: ShellContext = { openNewWorkspace: () => setCreating(true) };
 
@@ -95,12 +88,11 @@ export default function Shell() {
           <NavLink to="/app" end><HomeIcon />Home</NavLink>
           {current && <NavLink to={`/app/w/${current.id}`} end><Chat />Ask</NavLink>}
           {current && <NavLink to={`/app/w/${current.id}/library`}><Book />Library</NavLink>}
-          <NavLink to="/app/settings"><Gear />Settings</NavLink>
         </div>
 
         {workspaces.length > 0 && (
           <div>
-            <div className="side-label">WORKSPACES</div>
+            <div className="side-label">Workspaces</div>
             <div className="threads">
               {workspaces.slice(0, 8).map((w) => (
                 <Link key={w.id} to={`/app/w/${w.id}`} className={w.id === currentId && wsMatch ? "active" : ""}>{w.title}</Link>
@@ -109,11 +101,11 @@ export default function Shell() {
           </div>
         )}
 
-        <div className="me">
+        <Link className="me" to="/app/settings" title="Settings">
           <div className="avatar" aria-hidden="true">{initials(user?.username || "")}</div>
-          <div className="who"><span>{user?.username}</span><small>Signed in</small></div>
-          <button type="button" aria-label="Sign out" title="Sign out" onClick={signOut}><LogOut /></button>
-        </div>
+          <div className="who"><span>{user?.username}</span><small>Settings</small></div>
+          <span className="gear" aria-hidden="true"><Gear size={16} /></span>
+        </Link>
       </nav>
       <div className="main">
         <Outlet context={context} />

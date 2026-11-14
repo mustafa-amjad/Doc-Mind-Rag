@@ -66,8 +66,11 @@ def image_to_data_url(image) -> str:
 
 
 def clean_model_text(text: str) -> str:
-    """Drop <think>...</think> reasoning that some models print before the answer."""
-    return re.sub(r"<think>.*?</think>", "", text or "", flags=re.DOTALL).strip()
+    """Drop <think>...</think> reasoning that some models print before the answer, and turn the
+    narrow / non-breaking spaces gpt-oss likes (U+202F, U+00A0) into plain spaces: many fonts draw
+    them with no width, so "30 days" would read as "30days"."""
+    text = re.sub(r"<think>.*?</think>", "", text or "", flags=re.DOTALL)
+    return re.sub("[\u00a0\u2007\u202f]", " ", text).strip()
 
 
 def normalize_citations(text: str) -> str:

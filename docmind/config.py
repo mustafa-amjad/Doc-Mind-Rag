@@ -41,6 +41,9 @@ HISTORY_TURNS = 6  # how many recent messages the AI "remembers" in a chat
 
 # ---- login sessions (stay logged in after refresh) ----
 COOKIE_NAME = "docmind_session"  # name of the browser cookie
+# The web app (server.py) uses its own name: cookies ignore ports, so on one host the web app's
+# HttpOnly cookie would otherwise block the Streamlit app from saving its sign-in.
+WEB_COOKIE_NAME = "docmind_web_session"
 SESSION_DAYS = 30  # how long a login stays valid
 
 # ---- web links ----

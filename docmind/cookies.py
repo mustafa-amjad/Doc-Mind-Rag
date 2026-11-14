@@ -3,6 +3,7 @@ Reading is easy (the server receives cookies). Writing needs a tiny JavaScript s
 import json  # safely puts values inside JavaScript
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from docmind import config
 
@@ -35,11 +36,13 @@ def apply_pending() -> None:
     max_age = config.SESSION_DAYS * 86400 if kind == "set" else 0  # 0 = delete now
     value = json.dumps(token or "")  # JSON string = safe JS string
     name = json.dumps(config.COOKIE_NAME)
-    st.html(  # runs in the page itself, so window.parent === window
-        f"""<script>{{                                            // block scope: safe to run more than once
-        const p = window.parent;                                   // the real page (also correct inside an iframe)
-        const secure = p.location.protocol === "https:" ? "; Secure" : "";   // Secure flag only on https
+    # A component iframe (srcdoc, same origin as the app) reliably runs the script; st.html does not
+    # execute <script> tags in practice, which left the cookie unset and signed users out on refresh.
+    components.html(
+        f"""<script>
+        const p = window.parent;
+        const secure = p.location.protocol === "https:" ? "; Secure" : "";
         p.document.cookie = {name} + "=" + {value} + "; path=/; max-age={max_age}; SameSite=Lax" + secure;
-        }}</script>""",
-        unsafe_allow_javascript=True,
+        </script>""",
+        height=0,
     )

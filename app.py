@@ -81,6 +81,7 @@ def cited_numbers(text: str, sources: list[dict]) -> list[int]:
 
 def answer_markdown(text: str) -> str:
     """Show [1] citation markers as small emerald badges, like the web app."""
+    text = re.sub("[\u00a0\u2007\u202f]", " ", text)  # older saved answers: fonts draw these with no width
     return re.sub(r"\s*\[(\d+)\]", r" :green-badge[\1]", text)
 
 
@@ -155,8 +156,8 @@ def render_viewer(messages: list[dict], user_id: int, chat_id: int | None) -> No
                 break
     with st.container(border=True):
         if not choice:
-            st.markdown("### Source viewer")
-            st.caption("The page behind each answer appears here. Click a numbered source under an answer to see it.")
+            st.markdown("#### Source")
+            st.caption("Pick a numbered source under an answer to see the page it came from.")
             return
         message = messages[choice[0]]
         source = message["sources"][choice[1] - 1]
@@ -187,7 +188,7 @@ def render_answer_extras(sources: list[dict], meta: str, searched: str = "", que
     if searched and searched.strip().lower() != question.strip().lower():  # memory rewrote the question
         details += f"  \nSearched for: “{md_escape(shorten(searched, 120))}”"
     st.caption(details)
-    with st.expander(f"All passages used ({len(sources)})", icon=":material/format_quote:"):
+    with st.expander(f"Passages used ({len(sources)})", icon=":material/format_quote:"):
         for number, src in enumerate(sources, start=1):
             with st.container(border=True):
                 with st.container(horizontal=True, vertical_alignment="center", gap="small"):
@@ -219,40 +220,30 @@ def chat_to_markdown(title: str, messages: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def page_header() -> None:
+def page_header(title: str = "Sign in to DocMind", note: str = "") -> None:
     """Title block for the sign-in screens."""
     st.space("large")
-    st.markdown("### DocMind")
-    st.title("Answers you can :green[check.]", anchor=False)
-    st.caption("Ask questions about your documents. Every answer shows the page it came from, "
-               "and DocMind says so when the answer isn't there.")
+    st.title(title, anchor=False)
+    if note:
+        st.caption(note)
 
 
 def getting_started() -> None:
     """Empty state: what to do before the first question."""
-    with st.container(border=True):
-        st.markdown("**Add documents to this chat**")
-        st.caption("Open **Documents** in the sidebar, upload files or paste a link, then build the index.")
-        steps = [
-            (":material/upload_file:", "Upload", "PDF, Word, text, Markdown, HTML, images or a public web link."),
-            (":material/database:", "Index", "Documents are chunked and embedded once, then saved with the chat."),
-            (":material/forum:", "Ask", "Answers cite the file and page. Follow-up questions keep context."),
-        ]
-        for column, (icon, title, text) in zip(st.columns(3), steps):
-            column.markdown(f"{icon} **{title}**")
-            column.caption(text)
+    st.space("medium")
+    st.markdown("#### Add files to start")
+    st.caption("Open **Documents** on the left and upload PDFs, Word files, text, images or a link. "
+               "Scanned pages are read with OCR. Then ask a question and each answer will show the page it came from.")
 
 
 def knowledge_base(stats: dict) -> None:
-    """Indexed document summary for the current chat."""
-    cols = st.columns(4)
-    cols[0].metric("Files", stats["files"], border=True)
-    cols[1].metric("Pages", stats["pages"], border=True)
-    cols[2].metric("Chunks", stats["chunks"], border=True)
-    cols[3].metric("Index", str(stats["index"]).upper(), border=True)
+    """One quiet line: what this chat is searching."""
     names = stats.get("names", [])
+    files, pages = stats["files"], stats["pages"]
+    summary = f"{files} file{'s' if files != 1 else ''}, {pages} page{'s' if pages != 1 else ''}"
     if names:
-        st.caption(":material/folder_open: " + " · ".join(md_escape(name) for name in names))
+        summary += ": " + ", ".join(md_escape(name) for name in names)
+    st.caption(f":material/folder_open: {summary}")
 
 
 # ====================== session state: which user, which chat ======================
@@ -297,7 +288,7 @@ def start_login(user: dict) -> None:
 def logout() -> None:
     auth.end_session(cookies.read_token())  # kill the saved login so the old cookie stops working
     cookies.queue_clear()  # and remove the cookie from the browser
-    for key in ("user", "chat_id", "messages", "pipeline", "stats", "confirm_delete", "pending_question"):
+    for key in ("user", "chat_id", "messages", "pipeline", "stats", "confirm_delete", "pending_question", "viewer", "prefs"):
         st.session_state.pop(key, None)
 
 
@@ -356,21 +347,20 @@ def render_auth() -> None:
                     st.rerun()
                 except ValueError as error:
                     st.error(str(error))
-        st.caption(":material/lock: Chats and indexed document text are stored on this server under your account.")
+        st.caption("Your chats and files are private to your account.")
 
 
 def render_recovery_code_screen(code: str) -> None:
     """Shown once after signup / reset / new code. Nothing else works until the user confirms."""
     _, middle, _ = st.columns([1, 1.3, 1])
     with middle:
-        page_header()
-        st.subheader("Save your recovery code", anchor=False)
-        st.warning("This code is the only way to reset a forgotten password, and it is shown once. "
-                   "Store it in a password manager.", icon=":material/key:")
+        page_header("Save your recovery code",
+                    "You need this code to reset a forgotten password. It is shown only once, "
+                    "so keep it in a password manager.")
         st.code(code, language=None)
         st.download_button("Download as text file", data=f"DocMind recovery code: {code}\n",
                            file_name="docmind_recovery_code.txt", icon=":material/download:", width="stretch")
-        if st.button("I have saved it, continue", type="primary", width="stretch"):
+        if st.button("I've saved it", type="primary", width="stretch"):
             st.session_state.pop("new_recovery_code", None)
             st.rerun()
 
@@ -406,6 +396,95 @@ def chat_row(chat: dict, active: bool, user_id: int) -> None:
             if st.button("Delete", key=f"del_{chat_id}", type="tertiary", icon=":material/delete:"):
                 st.session_state.confirm_delete = chat_id
                 st.rerun()
+
+
+def delete_all_chats(user_id: int) -> int:
+    """Delete every chat, its messages, its index and its stored files. Returns how many."""
+    chats = db.list_chats(user_id, limit=100_000)
+    for item in chats:
+        db.delete_chat(item["id"], user_id)
+        shutil.rmtree(index_folder(user_id, item["id"]), ignore_errors=True)
+    return len(chats)
+
+
+DEFAULT_PREFS = {"hybrid": True, "rerank": True, "memory": True, "top_k": config.FINAL_K}
+
+
+@st.dialog("Settings", width="medium")
+def settings_dialog() -> None:
+    """Account, security and privacy live here, away from the chat."""
+    user = st.session_state.user
+    user_id = user["id"]
+    prefs = st.session_state.prefs
+    general, account, security, privacy = st.tabs(["General", "Account", "Security", "Privacy"])
+
+    with general:
+        st.markdown("**Search**")
+        prefs["hybrid"] = st.toggle("Hybrid search", value=prefs["hybrid"], key="pref_hybrid",
+                                    help="Combines keyword (BM25) and meaning (vector) search.")
+        prefs["rerank"] = st.toggle("Re-rank results", value=prefs["rerank"], key="pref_rerank",
+                                    help="A cross-encoder puts the most relevant passage first.")
+        prefs["memory"] = st.toggle("Chat memory", value=prefs["memory"], key="pref_memory",
+                                    help="Follow-up questions use the earlier ones for context.")
+        prefs["top_k"] = st.slider("Passages per answer", 1, 8, prefs["top_k"], key="pref_top_k")
+        st.caption(f"Answers are written by {md_escape(st.session_state.llm.model)} on Groq.")
+
+    with account:
+        st.text_input("Username", value=user["username"], disabled=True)
+        st.caption("Usernames can't be changed.")
+        if st.button("Sign out", icon=":material/logout:"):
+            logout()
+            st.rerun()
+
+    with security:
+        st.markdown("**Change password**")
+        with st.form("change_password_form", clear_on_submit=True, border=False):
+            old_pass = st.text_input("Current password", type="password")
+            new_pass = st.text_input("New password", type="password", help="At least 8 characters.")
+            change_clicked = st.form_submit_button("Update password")
+        if change_clicked:
+            try:
+                auth.change_password(user_id, old_pass, new_pass)
+                start_login(user)  # old sign-ins were removed, so issue a fresh one for this browser
+                st.session_state.flash = "Password updated. Other devices were signed out."
+                st.rerun()
+            except ValueError as error:
+                st.error(str(error))
+        st.divider()
+        st.markdown("**Recovery code**")
+        st.caption("Lets you reset a forgotten password. A new code replaces the old one.")
+        with st.form("new_code_form", clear_on_submit=True, border=False):
+            code_pass = st.text_input("Password", type="password", key="code_pass")
+            code_clicked = st.form_submit_button("Create new code")
+        if code_clicked:
+            try:
+                st.session_state.new_recovery_code = auth.regenerate_recovery_code(user_id, code_pass)
+                st.rerun()
+            except ValueError as error:
+                st.error(str(error))
+        st.divider()
+        st.markdown("**Sessions**")
+        st.caption("Sign out everywhere except this browser.")
+        if st.button("Sign out of other devices"):
+            db.delete_user_sessions(user_id)
+            start_login(user)
+            st.session_state.flash = "Signed out of all other devices."
+            st.rerun()
+
+    with privacy:
+        st.markdown("**What DocMind stores**")
+        st.caption("Your username, a salted hash of your password, your chats, and the files you upload "
+                   "with their search index. Only your account can open them. To write an answer, your "
+                   "question and the matching passages are sent to Groq.")
+        st.divider()
+        st.markdown("**Delete all chats**")
+        st.caption("Removes every chat, its messages and its uploaded files. This can't be undone.")
+        sure = st.checkbox("I understand", key="confirm_wipe")
+        if st.button("Delete all chats", type="primary", disabled=not sure):
+            count = delete_all_chats(user_id)
+            new_chat()
+            st.session_state.flash = f"Deleted {count} chat{'s' if count != 1 else ''}."
+            st.rerun()
 
 
 # ====================== START ======================
@@ -449,16 +528,20 @@ chat = db.get_chat(st.session_state.chat_id, user_id) if st.session_state.chat_i
 chat_title = chat["title"] if chat else DEFAULT_TITLE
 
 # ====================== sidebar ======================
-with st.sidebar:
-    with st.container(horizontal=True, vertical_alignment="center"):
-        st.markdown("## DocMind")
-        st.space("stretch")
-        if st.button("", icon=":material/logout:", type="tertiary", help="Sign out"):
-            logout()
-            st.rerun()
-    st.caption(f"Signed in as **{md_escape(user['username'])}**")
+if "prefs" not in st.session_state:
+    st.session_state.prefs = dict(DEFAULT_PREFS)
+prefs = st.session_state.prefs
+use_hybrid, use_rerank, use_memory, top_k = prefs["hybrid"], prefs["rerank"], prefs["memory"], prefs["top_k"]
+mode = ("Hybrid" if use_hybrid else "Vector") + (" + re-rank" if use_rerank else "")
+flash = st.session_state.pop("flash", None)
+if flash:
+    st.toast(flash, icon=":material/check_circle:")
 
-    if st.button("New chat", icon=":material/add:", type="primary", width="stretch"):
+st.html("<style>[class*='st-key-menu_'] { overflow: visible !important; flex-shrink: 0; }</style>")  # no scrollbar under ⋮
+
+with st.sidebar:
+    st.markdown("### DocMind")
+    if st.button("New chat", icon=":material/edit_square:", width="stretch"):
         new_chat()
         st.rerun()
 
@@ -466,12 +549,12 @@ with st.sidebar:
     pinned = [c for c in chats if c["pinned"]]
     recent = [c for c in chats if not c["pinned"]]
     if pinned:
-        st.caption("**Pinned**")
+        st.caption("Pinned")
         for item in pinned:
             chat_row(item, item["id"] == st.session_state.chat_id, user_id)
-    st.caption("**Recent**")
-    if not recent:
-        st.caption("No chats yet. Upload a document to start one.")
+    st.caption("Chats")
+    if not recent and not pinned:
+        st.caption("Your chats will appear here.")
     for item in recent:
         chat_row(item, item["id"] == st.session_state.chat_id, user_id)
 
@@ -480,28 +563,26 @@ with st.sidebar:
         uploads = st.file_uploader("Files", type=SUPPORTED_TYPES, accept_multiple_files=True,
                                    label_visibility="collapsed", key=f"upload_{st.session_state.chat_id}",
                                    help="PDF, DOCX, TXT, MD, HTML or an image (PNG, JPG, WEBP, BMP, GIF, TIFF)")
-        link = st.text_input("Or add a web page / PDF link", placeholder="https://example.com/page",
+        link = st.text_input("Link", placeholder="Paste a web page or PDF link",
                              key=f"link_{st.session_state.chat_id}").strip()
         ocr_ready = ocr.is_available()
-        ocr_on = st.toggle("OCR for scans and pictures", value=ocr_ready, disabled=not ocr_ready,
+        ocr_on = st.toggle("Read scans and images", value=ocr_ready, disabled=not ocr_ready,
                            help=f"Reads scanned PDF pages, image files, and the words inside charts and screenshots "
                                 f"in PDF and Word files. Slower; up to {config.MAX_OCR_PAGES} scanned pages and "
                                 f"{config.MAX_IMAGES_PER_FILE} pictures per file.")
         if not ocr_ready:
             st.caption("OCR is not installed. Run `pip install -r requirements.txt` and restart.")
-        describe_on = st.toggle("Describe charts and diagrams with AI", value=False,
+        describe_on = st.toggle("Describe charts with AI", value=False,
                                 help=f"Sends each picture to the Groq vision model ({config.VISION_MODEL}) and "
                                      f"indexes its description, so questions about charts and diagrams can be "
                                      f"answered. Up to {config.MAX_VISION_IMAGES} pictures per file; uses API quota.")
         add_mode = True
         if pipeline.is_ready:  # chat already has documents -> let the user choose
-            add_mode = st.segmented_control("When building", ["Add to chat", "Replace all"], default="Add to chat",
-                                            key=f"mode_{st.session_state.chat_id}") != "Replace all"
-        label = "Build index" if not pipeline.is_ready else "Update index"
-        if st.button(label, icon=":material/database:", type="primary", width="stretch",
-                     disabled=not (uploads or link)):
-            slow = " Reading pictures may take a while." if (ocr_on or describe_on) else ""
-            with st.spinner("Reading and indexing documents..." + slow):
+            add_mode = st.segmented_control("New files", ["Add to these", "Replace these"], default="Add to these",
+                                            key=f"mode_{st.session_state.chat_id}") != "Replace these"
+        if st.button("Add to chat", type="primary", width="stretch", disabled=not (uploads or link)):
+            slow = " Scans and images take a little longer." if (ocr_on or describe_on) else ""
+            with st.spinner("Reading your files..." + slow):
                 try:
                     files = [(f.name, f.getvalue()) for f in uploads]
                     if link:  # download the link (public sites only)
@@ -518,11 +599,11 @@ with st.sidebar:
                         (saved / "files" / Path(name).name).write_bytes(data)
                     ocr_pages = st.session_state.stats.get("ocr_pages", 0)
                     image_pages = st.session_state.stats.get("image_pages", 0)
-                    message = "Index saved."
+                    message = "Files ready."
                     if ocr_pages:
-                        message += f" {ocr_pages} pages read with OCR."
+                        message += f" {ocr_pages} scanned page{'s' if ocr_pages != 1 else ''} read."
                     if image_pages:
-                        message += f" {image_pages} pages include text from pictures."
+                        message += f" Text found in pictures on {image_pages} page{'s' if image_pages != 1 else ''}."
                     st.toast(message, icon=":material/check_circle:")
                     st.session_state.ingest_warnings = st.session_state.stats.get("warnings", [])
                     st.rerun()
@@ -531,46 +612,12 @@ with st.sidebar:
         for warning in st.session_state.get("ingest_warnings", []):  # e.g. vision model unavailable
             st.warning(warning, icon=":material/warning:")
 
-    with st.expander("Retrieval settings", icon=":material/tune:"):
-        use_hybrid = st.toggle("Hybrid search", value=True, help="Combine keyword (BM25) and semantic (vector) search.")
-        use_rerank = st.toggle("Re-ranking", value=True, help="Re-order candidates with a cross-encoder for accuracy.")
-        use_memory = st.toggle("Chat memory", value=True, help="Resolve follow-up questions using earlier turns.")
-        top_k = st.slider("Passages sent to the model", 1, 8, config.FINAL_K)
-    mode = ("Hybrid" if use_hybrid else "Vector") + (" + re-rank" if use_rerank else "")
-
-    st.download_button(
-        "Export chat",
-        data=chat_to_markdown(chat_title, st.session_state.messages),
-        file_name="docmind_chat.md",
-        mime="text/markdown",
-        icon=":material/download:",
-        width="stretch",
-        disabled=not st.session_state.messages,
-    )
-    with st.expander("Account", icon=":material/manage_accounts:"):
-        with st.form("change_password_form", clear_on_submit=True, border=False):
-            st.caption("Change password")
-            old_pass = st.text_input("Current password", type="password")
-            new_pass_1 = st.text_input("New password (at least 8 characters)", type="password")
-            change_clicked = st.form_submit_button("Change password", width="stretch")
-        if change_clicked:
-            try:
-                auth.change_password(user_id, old_pass, new_pass_1)
-                start_login(user)  # old logins were removed, so issue a fresh one for this browser
-                st.toast("Password changed. Other devices were signed out.", icon=":material/check_circle:")
-            except ValueError as error:
-                st.error(str(error))
-        with st.form("new_code_form", clear_on_submit=True, border=False):
-            st.caption("New recovery code (the old one stops working)")
-            code_pass = st.text_input("Your password", type="password", key="code_pass")
-            code_clicked = st.form_submit_button("Generate new code", width="stretch")
-        if code_clicked:
-            try:
-                st.session_state.new_recovery_code = auth.regenerate_recovery_code(user_id, code_pass)
-                st.rerun()
-            except ValueError as error:
-                st.error(str(error))
-    st.caption(f"Retrieval: {mode}, top {top_k}  \nModel: {md_escape(st.session_state.llm.model)} via Groq")
+    st.divider()
+    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+        st.markdown(f":material/account_circle: **{md_escape(user['username'])}**")
+        st.space("stretch")
+        if st.button("Settings", icon=":material/settings:", type="tertiary", key="open_settings"):
+            settings_dialog()
 
 # ====================== main area ======================
 typed = st.chat_input("Ask a question about your documents", disabled=not pipeline.is_ready)
@@ -584,6 +631,11 @@ with st.container(horizontal=True, vertical_alignment="center"):
             if st.button("Save", key=f"rename_save_{chat['id']}", type="primary"):
                 db.rename_chat(chat["id"], user_id, new_title.strip() or chat_title)
                 st.rerun()
+    if st.session_state.messages:
+        st.space("stretch")
+        st.download_button("Export", data=chat_to_markdown(chat_title, st.session_state.messages),
+                           file_name="docmind_chat.md", mime="text/markdown", icon=":material/download:",
+                           type="tertiary")
 
 if not pipeline.is_ready:  # nothing indexed yet -> show the guide
     getting_started()
@@ -603,7 +655,7 @@ with chat_area:
         is_user = message["role"] == "user"
         with st.chat_message(message["role"], avatar=USER_AVATAR if is_user else ASSISTANT_AVATAR):
             if is_user:
-                st.markdown(f"### {md_escape(message['content'])}")
+                st.markdown(f"**{md_escape(message['content'])}**")
                 previous_user_question = message["content"]
             else:
                 render_answer(message, index, previous_user_question)
@@ -613,7 +665,7 @@ if viewer_area is not None:
         render_viewer(messages, user_id, st.session_state.chat_id)
 
 if pipeline.is_ready and not st.session_state.messages and not question:  # empty chat -> offer starters
-    st.caption("Suggested questions")
+    st.caption("Try asking")
     with st.container(horizontal=True, gap="small"):
         for suggestion in SUGGESTIONS:
             if st.button(suggestion, icon=":material/arrow_outward:", icon_position="right"):
@@ -625,9 +677,9 @@ if question and st.session_state.chat_id:
     history = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages] if use_memory else []
     with chat_area:
         with st.chat_message("user", avatar=USER_AVATAR):
-            st.markdown(f"### {md_escape(question)}")
+            st.markdown(f"**{md_escape(question)}**")
         with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
-            with st.spinner("Searching your documents..."):
+            with st.spinner("Searching your files..."):
                 try:
                     result = pipeline.ask(question, use_hybrid, use_rerank, top_k, history)
                 except Exception as error:  # API key, rate limit, network... show it, keep the chat usable

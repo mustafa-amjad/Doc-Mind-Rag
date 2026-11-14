@@ -85,7 +85,7 @@ def write_manifest(user_id: int, workspace_id: int, files: list[dict]) -> None:
 
 # ---------------- auth ----------------
 def current_user(request: Request) -> dict:
-    user = auth.user_from_token(request.cookies.get(config.COOKIE_NAME))
+    user = auth.user_from_token(request.cookies.get(config.WEB_COOKIE_NAME))
     if not user:
         raise HTTPException(401, "Please sign in.")
     return user
@@ -99,7 +99,7 @@ def own_workspace(workspace_id: int, user: dict = Depends(current_user)) -> dict
 
 
 def set_session_cookie(request: Request, response: Response, user_id: int) -> None:
-    response.set_cookie(config.COOKIE_NAME, auth.create_session(user_id), max_age=config.SESSION_DAYS * 86400,
+    response.set_cookie(config.WEB_COOKIE_NAME, auth.create_session(user_id), max_age=config.SESSION_DAYS * 86400,
                         httponly=True, samesite="lax", secure=request.url.scheme == "https", path="/")
 
 
@@ -132,9 +132,55 @@ def login(body: Credentials, request: Request, response: Response):
 
 @app.post("/api/auth/logout")
 def logout(request: Request, response: Response):
-    auth.end_session(request.cookies.get(config.COOKIE_NAME))
-    response.delete_cookie(config.COOKIE_NAME, path="/")
+    auth.end_session(request.cookies.get(config.WEB_COOKIE_NAME))
+    response.delete_cookie(config.WEB_COOKIE_NAME, path="/")
     return {"ok": True}
+
+
+# ---------------- account (Settings: security and privacy) ----------------
+class PasswordChange(BaseModel):
+    current: str = Field(max_length=200)
+    new: str = Field(max_length=200)
+
+
+class PasswordOnly(BaseModel):
+    password: str = Field(max_length=200)
+
+
+@app.post("/api/account/password")
+def change_password(body: PasswordChange, request: Request, response: Response, user: dict = Depends(current_user)):
+    try:
+        auth.change_password(user["id"], body.current, body.new)  # also signs out every device
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from None
+    set_session_cookie(request, response, user["id"])  # keep this browser signed in
+    return {"ok": True}
+
+
+@app.post("/api/account/recovery-code")
+def new_recovery_code(body: PasswordOnly, user: dict = Depends(current_user)):
+    try:
+        return {"recovery_code": auth.regenerate_recovery_code(user["id"], body.password)}
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from None
+
+
+@app.post("/api/account/sign-out-others")
+def sign_out_others(request: Request, response: Response, user: dict = Depends(current_user)):
+    db.delete_user_sessions(user["id"])
+    set_session_cookie(request, response, user["id"])
+    return {"ok": True}
+
+
+@app.delete("/api/account/data")
+def delete_all_data(user: dict = Depends(current_user)):
+    """Delete every workspace with its questions, files and index. The account itself stays."""
+    chats = db.list_chats(user["id"], limit=100_000)
+    for chat in chats:
+        db.delete_chat(chat["id"], user["id"])
+        shutil.rmtree(folder(user["id"], chat["id"]), ignore_errors=True)
+        _pipelines.pop(chat["id"], None)
+    return {"deleted": len(chats)}
 
 
 @app.get("/api/health")
