@@ -1,48 +1,56 @@
-"""Browser cookie helpers for 'stay logged in'.
-Reading is easy (the server receives cookies). Writing needs a tiny JavaScript snippet."""
-import json  # safely puts values inside JavaScript
+"""'Stay signed in' for the Streamlit app.
 
+The sign-in token lives in the browser's localStorage and reaches Python through a tiny
+Streamlit component (custom components v2). Cookies are not used: Streamlit Community
+Cloud strips custom cookies before they reach the app, which signed people out on every
+refresh there. The token is a random key that expires on the server; only its hash is stored.
+"""
 import streamlit as st
-import streamlit.components.v1 as components
 
-from docmind import config
+STORE_KEY = "_signin_store"  # component state: {"token": "..."} once the browser has answered
+PENDING_KEY = "_signin_action"  # ("set", token) or ("clear", None), sent with the next run
 
-PENDING_KEY = "_cookie_action"  # remembers "set" or "clear" until the next page draw
-
-
-def read_token() -> str | None:
-    """Cookie sent by the browser when this session started (None if there is none)."""
-    try:
-        token = st.context.cookies.get(config.COOKIE_NAME)
-    except Exception:  # very old Streamlit or no context
-        return None
-    return token if isinstance(token, str) and token else None
+_STORE = st.components.v2.component(
+    "docmind_signin_store",
+    html="<span hidden></span>",
+    js="""
+export default function (component) {
+  const { data, setStateValue } = component
+  const KEY = "docmind_session"
+  let token = ""
+  try {
+    if (data && data.action === "set" && data.token) localStorage.setItem(KEY, data.token)
+    if (data && data.action === "clear") localStorage.removeItem(KEY)
+    token = localStorage.getItem(KEY) || ""
+  } catch (error) {
+    token = ""  // storage blocked (private mode, policy): behave as signed out
+  }
+  if (!data || data.known !== token) setStateValue("token", token)
+}
+""",
+)
 
 
 def queue_set(token: str) -> None:
-    st.session_state[PENDING_KEY] = ("set", token)  # written on the next run, after st.rerun()
+    """Save this token in the browser on the next run (after st.rerun())."""
+    st.session_state[PENDING_KEY] = ("set", token)
 
 
 def queue_clear() -> None:
+    """Remove the saved token from the browser on the next run."""
     st.session_state[PENDING_KEY] = ("clear", None)
 
 
-def apply_pending() -> None:
-    """Call near the top of every run. Writes/clears the cookie once, then forgets the request."""
-    action = st.session_state.pop(PENDING_KEY, None)
-    if not action:
-        return
-    kind, token = action
-    max_age = config.SESSION_DAYS * 86400 if kind == "set" else 0  # 0 = delete now
-    value = json.dumps(token or "")  # JSON string = safe JS string
-    name = json.dumps(config.COOKIE_NAME)
-    # A component iframe (srcdoc, same origin as the app) reliably runs the script; st.html does not
-    # execute <script> tags in practice, which left the cookie unset and signed users out on refresh.
-    components.html(
-        f"""<script>
-        const p = window.parent;
-        const secure = p.location.protocol === "https:" ? "; Secure" : "";
-        p.document.cookie = {name} + "=" + {value} + "; path=/; max-age={max_age}; SameSite=Lax" + secure;
-        </script>""",
-        height=0,
-    )
+def sync() -> str | None:
+    """Mount the store (call once, near the top of every run).
+    Returns the saved token, "" when there is none, or None while the browser hasn't answered yet."""
+    kind, token = st.session_state.pop(PENDING_KEY, None) or (None, None)
+    known = (st.session_state.get(STORE_KEY) or {}).get("token")
+    result = _STORE(key=STORE_KEY, data={"action": kind, "token": token, "known": known},
+                    on_token_change=lambda: None, height=1)
+    return getattr(result, "token", None)
+
+
+def read_token() -> str | None:
+    """The token the browser last reported (None if unknown)."""
+    return (st.session_state.get(STORE_KEY) or {}).get("token") or None

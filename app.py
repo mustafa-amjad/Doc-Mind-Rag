@@ -587,12 +587,16 @@ def settings_dialog() -> None:
 
 # ====================== START ======================
 db.init_db()  # creates data/docmind.db and tables on first run
-cookies.apply_pending()  # write or clear the login cookie if a login/logout just happened
+saved_token = cookies.sync()  # saves/clears the sign-in token in the browser, returns the saved one
 
-if st.session_state.get("user") is None:  # new browser tab: maybe the saved cookie still works
-    st.session_state.user = auth.user_from_token(cookies.read_token())
+if st.session_state.get("user") is None and saved_token:  # new tab or refresh: the saved sign-in still works?
+    st.session_state.user = auth.user_from_token(saved_token)
 
-if st.session_state.get("user") is None:  # still not logged in -> show login and stop
+if st.session_state.get("user") is None:  # still not signed in
+    if saved_token is None and not st.session_state.get("_waited_for_browser"):
+        st.session_state._waited_for_browser = True  # the browser answers in a moment; avoid flashing the form
+        st.caption("Loading...")
+        st.stop()
     render_auth()
     st.stop()
 
