@@ -6,9 +6,9 @@ from pathlib import Path  # builds file paths that work on Windows and Mac
 
 import streamlit as st
 
-from docmind import auth, config, cookies, db, ocr
+from docmind import auth, config, cookies, db, evidence, ocr
 from docmind.embedder import Embedder
-from docmind.llm import LLM, friendly_error
+from docmind.llm import LLM, NOT_FOUND, friendly_error
 from docmind.loader import SUPPORTED_TYPES, fetch_url
 from docmind.pipeline import RAGPipeline
 from docmind.reranker import Reranker
@@ -69,14 +69,125 @@ def unique_pages(sources: list[dict]) -> list[str]:
     return labels
 
 
+def cited_numbers(text: str, sources: list[dict]) -> list[int]:
+    """[n] markers the answer actually uses, in order, that point at a real source."""
+    found = []
+    for match in re.finditer(r"\[(\d+)\]", text):
+        number = int(match.group(1))
+        if 1 <= number <= len(sources) and number not in found:
+            found.append(number)
+    return found
+
+
+def answer_markdown(text: str) -> str:
+    """Show [1] citation markers as small emerald badges, like the web app."""
+    return re.sub(r"\s*\[(\d+)\]", r" :green-badge[\1]", text)
+
+
+def render_answer(message: dict, index: int, question: str = "") -> None:
+    """One saved answer: status badge, text with citation badges, source buttons for the viewer, details."""
+    sources, content = message.get("sources", []), message["content"]
+    numbers = cited_numbers(content, sources)
+    if content.strip() == NOT_FOUND:
+        st.badge("Not in your documents", color="gray")
+    elif numbers:
+        files = len({sources[n - 1]["source"] for n in numbers})
+        st.badge(f"Cited from {files} source{'s' if files > 1 else ''}", icon=":material/check:", color="green")
+    st.markdown(answer_markdown(content))
+    if numbers:
+        with st.container(horizontal=True, gap="small"):
+            for n in numbers:
+                src = sources[n - 1]
+                active = st.session_state.get("viewer") == (index, n)
+                if st.button(f"{n} · {src['source']} · p.{src['page']}", key=f"cite_{index}_{n}",
+                             type="primary" if active else "secondary", icon=":material/description:"):
+                    st.session_state.viewer = (index, n)
+                    st.rerun()
+    if sources:
+        render_answer_extras(sources, message.get("meta", ""), message.get("searched", ""), question)
+
+
+@st.cache_data(show_spinner=False, max_entries=64)
+def highlighted_page(path: str, modified: float, page: int, sentences: tuple) -> tuple:
+    """A PDF page as an image with the cited sentences highlighted. Returns (image, found_any)."""
+    import pypdfium2
+    from PIL import Image, ImageDraw
+
+    data = Path(path).read_bytes()
+    pdf = pypdfium2.PdfDocument(data)
+    try:
+        image = pdf[page - 1].render(scale=2).to_pil().convert("RGBA")
+    finally:
+        pdf.close()
+    boxes = evidence.pdf_highlights(data, page, list(sentences))["boxes"] if sentences else []
+    overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    for box in boxes:  # PDF points -> pixels (rendered at 2x)
+        draw.rounded_rectangle([(box["x0"] - 2) * 2, (box["top"] - 2) * 2, (box["x1"] + 2) * 2, (box["bottom"] + 2) * 2],
+                               radius=4, fill=(247, 213, 74, 110))
+    return Image.alpha_composite(image, overlay).convert("RGB"), bool(boxes)
+
+
+def readable_passage(text: str, sentences: list[str]) -> str:
+    """Passage as markdown with the cited sentences highlighted; index tags shown as plain labels."""
+    def tidy(value: str) -> str:
+        value = value.replace("[Image description]", "AI description of the picture:")
+        return value.replace("[Image]", "Picture (text read from it):").replace("[Table]", "Table columns:")
+    marked = md_escape(tidy(text)).replace("\n", "  \n")
+    for sentence in sentences:
+        escaped = md_escape(tidy(sentence))
+        if escaped and escaped in marked:
+            marked = marked.replace(escaped, f":orange-background[{escaped}]", 1)
+    return marked
+
+
+def render_viewer(messages: list[dict], user_id: int, chat_id: int | None) -> None:
+    """Right-hand source viewer: the page behind the selected citation, with the sentences highlighted."""
+    choice = st.session_state.get("viewer")
+    if not choice or choice[0] >= len(messages) or messages[choice[0]]["role"] != "assistant":
+        choice = None
+        for index in range(len(messages) - 1, -1, -1):  # default: newest answer's first citation
+            message = messages[index]
+            if message["role"] == "assistant":
+                numbers = cited_numbers(message["content"], message.get("sources", []))
+                if numbers:
+                    choice = (index, numbers[0])
+                break
+    with st.container(border=True):
+        if not choice:
+            st.markdown("### Source viewer")
+            st.caption("The page behind each answer appears here. Click a numbered source under an answer to see it.")
+            return
+        message = messages[choice[0]]
+        source = message["sources"][choice[1] - 1]
+        st.markdown(f":green-badge[{choice[1]}] **{md_escape(source['source'])}**")
+        notes = [f"Page {source['page']}"] + (["read with OCR"] if source.get("ocr") else []) \
+            + (["includes a picture"] if source.get("image") else [])
+        st.caption(" · ".join(notes))
+        sentences = evidence.pick_sentences(source["text"], message["content"])
+        stored = index_folder(user_id, chat_id) / "files" / Path(source["source"]).name if chat_id else None
+        shown_page = False
+        if stored and stored.exists() and stored.suffix.lower() == ".pdf":
+            try:
+                image, found = highlighted_page(str(stored), stored.stat().st_mtime, int(source["page"]), tuple(sentences))
+                st.image(image, width="stretch")
+                shown_page = True
+                if not found and sentences:  # scanned page: show the OCR text with the sentence marked
+                    st.caption("Text read from this page" + (" with OCR" if source.get("ocr") else ""))
+                    st.markdown(readable_passage(source["text"], sentences))
+            except Exception:
+                shown_page = False
+        if not shown_page:
+            st.markdown(readable_passage(source["text"], sentences))
+
+
 def render_answer_extras(sources: list[dict], meta: str, searched: str = "", question: str = "") -> None:
-    """Citations + timing + collapsed evidence. Used for new AND old messages."""
-    cited = " · ".join(md_escape(label) for label in unique_pages(sources))
+    """Timing, the rewritten search and every passage used (collapsed)."""
     details = md_escape(meta)
     if searched and searched.strip().lower() != question.strip().lower():  # memory rewrote the question
         details += f"  \nSearched for: “{md_escape(shorten(searched, 120))}”"
-    st.caption(f":material/menu_book: {cited}  \n{details}")
-    with st.expander(f"Evidence ({len(sources)} passages)", icon=":material/format_quote:"):
+    st.caption(details)
+    with st.expander(f"All passages used ({len(sources)})", icon=":material/format_quote:"):
         for number, src in enumerate(sources, start=1):
             with st.container(border=True):
                 with st.container(horizontal=True, vertical_alignment="center", gap="small"):
@@ -111,8 +222,10 @@ def chat_to_markdown(title: str, messages: list[dict]) -> str:
 def page_header() -> None:
     """Title block for the sign-in screens."""
     st.space("large")
-    st.title("DocMind", anchor=False)
-    st.caption("Ask questions about your documents and get answers with page-level citations.")
+    st.markdown("### DocMind")
+    st.title("Answers you can :green[check.]", anchor=False)
+    st.caption("Ask questions about your documents. Every answer shows the page it came from, "
+               "and DocMind says so when the answer isn't there.")
 
 
 def getting_started() -> None:
@@ -155,6 +268,7 @@ def new_chat() -> None:
     st.session_state.stats = None
     st.session_state.confirm_delete = None
     st.session_state.ingest_warnings = []
+    st.session_state.viewer = None
 
 
 def open_chat(chat_id: int) -> None:
@@ -171,6 +285,7 @@ def open_chat(chat_id: int) -> None:
     st.session_state.pipeline = pipeline
     st.session_state.confirm_delete = None
     st.session_state.ingest_warnings = []
+    st.session_state.viewer = None
 
 
 def start_login(user: dict) -> None:
@@ -336,7 +451,7 @@ chat_title = chat["title"] if chat else DEFAULT_TITLE
 # ====================== sidebar ======================
 with st.sidebar:
     with st.container(horizontal=True, vertical_alignment="center"):
-        st.markdown("#### :material/description: DocMind")
+        st.markdown("## DocMind")
         st.space("stretch")
         if st.button("", icon=":material/logout:", type="tertiary", help="Sign out"):
             logout()
@@ -396,7 +511,11 @@ with st.sidebar:
                     if st.session_state.chat_id is None:  # first save: create the chat now
                         title = Path(files[0][0]).stem[:40] or DEFAULT_TITLE
                         st.session_state.chat_id = db.create_chat(user_id, title)
-                    pipeline.save(index_folder(user_id, st.session_state.chat_id))  # keep the index for later
+                    saved = index_folder(user_id, st.session_state.chat_id)
+                    pipeline.save(saved)  # keep the index for later
+                    (saved / "files").mkdir(parents=True, exist_ok=True)
+                    for name, data in files:  # originals, so the source viewer can show the real page
+                        (saved / "files" / Path(name).name).write_bytes(data)
                     ocr_pages = st.session_state.stats.get("ocr_pages", 0)
                     image_pages = st.session_state.stats.get("image_pages", 0)
                     message = "Index saved."
@@ -471,16 +590,27 @@ if not pipeline.is_ready:  # nothing indexed yet -> show the guide
 else:
     knowledge_base(st.session_state.stats)
 
-previous_user_question = ""
-for message in st.session_state.messages:  # redraw history on every rerun
-    is_user = message["role"] == "user"
-    with st.chat_message(message["role"], avatar=USER_AVATAR if is_user else ASSISTANT_AVATAR):
-        st.markdown(message["content"])
-        if is_user:
-            previous_user_question = message["content"]
-        elif message.get("sources"):
-            render_answer_extras(message["sources"], message["meta"], message.get("searched", ""),
-                                 previous_user_question)
+messages = st.session_state.messages
+show_viewer = pipeline.is_ready and any(m["role"] == "assistant" for m in messages)
+if show_viewer:  # like the web app: the conversation on the left, the cited page on the right
+    chat_area, viewer_area = st.columns([3, 2], gap="large")
+else:
+    chat_area, viewer_area = st.container(), None
+
+with chat_area:
+    previous_user_question = ""
+    for index, message in enumerate(messages):  # redraw history on every rerun
+        is_user = message["role"] == "user"
+        with st.chat_message(message["role"], avatar=USER_AVATAR if is_user else ASSISTANT_AVATAR):
+            if is_user:
+                st.markdown(f"### {md_escape(message['content'])}")
+                previous_user_question = message["content"]
+            else:
+                render_answer(message, index, previous_user_question)
+
+if viewer_area is not None:
+    with viewer_area:
+        render_viewer(messages, user_id, st.session_state.chat_id)
 
 if pipeline.is_ready and not st.session_state.messages and not question:  # empty chat -> offer starters
     st.caption("Suggested questions")
@@ -493,16 +623,16 @@ if pipeline.is_ready and not st.session_state.messages and not question:  # empt
 if question and st.session_state.chat_id:
     chat_id = st.session_state.chat_id
     history = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages] if use_memory else []
-    with st.chat_message("user", avatar=USER_AVATAR):
-        st.markdown(question)
-    with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
-        with st.spinner("Searching your documents..."):
-            try:
-                result = pipeline.ask(question, use_hybrid, use_rerank, top_k, history)
-            except Exception as error:  # API key, rate limit, network... show it, keep the chat usable
-                st.error(friendly_error(error), icon=":material/error:")
-                st.stop()  # nothing is saved, so the user can simply ask again
-        st.markdown(result["answer"])
+    with chat_area:
+        with st.chat_message("user", avatar=USER_AVATAR):
+            st.markdown(f"### {md_escape(question)}")
+        with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
+            with st.spinner("Searching your documents..."):
+                try:
+                    result = pipeline.ask(question, use_hybrid, use_rerank, top_k, history)
+                except Exception as error:  # API key, rate limit, network... show it, keep the chat usable
+                    st.error(friendly_error(error), icon=":material/error:")
+                    st.stop()  # nothing is saved, so the user can simply ask again
     if not st.session_state.messages:  # first question names the chat
         db.rename_chat(chat_id, user_id, shorten(question, 40))
     db.add_message(chat_id, user_id, "user", question)
@@ -514,4 +644,6 @@ if question and st.session_state.chat_id:
         {"role": "assistant", "content": result["answer"], "sources": result["sources"],
          "meta": meta, "searched": searched}
     )
+    first = cited_numbers(result["answer"], result["sources"])
+    st.session_state.viewer = (len(st.session_state.messages) - 1, first[0]) if first else None  # show the new source
     st.rerun()  # redraw so the sidebar (recent order, export button) updates immediately

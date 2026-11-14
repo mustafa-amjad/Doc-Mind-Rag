@@ -1,3 +1,12 @@
+# ---- 1. build the web front end ----
+FROM node:22-slim AS web
+WORKDIR /web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY web/ ./
+RUN npm run build
+
+# ---- 2. the app: FastAPI API + built front end ----
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -15,6 +24,7 @@ CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
 RUN python -c "from rapidocr import RapidOCR; RapidOCR()"
 
 COPY . .
-EXPOSE 8501
-HEALTHCHECK CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"
-CMD ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+COPY --from=web /web/dist ./web/dist
+EXPOSE 8000
+HEALTHCHECK CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
