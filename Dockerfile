@@ -5,8 +5,8 @@ ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 
 # CPU-only torch first (much smaller than the default CUDA build)
 RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
-COPY requirements.txt requirements-ocr.txt ./
-RUN pip install -r requirements.txt -r requirements-ocr.txt
+COPY requirements.txt ./
+RUN pip install -r requirements.txt
 
 # download the models at build time so the first start is fast
 RUN python -c "from sentence_transformers import SentenceTransformer, CrossEncoder; \

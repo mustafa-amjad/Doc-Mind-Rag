@@ -16,7 +16,8 @@ def friendly_error(error: Exception) -> str:
     if isinstance(error, groq.APIConnectionError):
         return "Could not reach Groq. Check your internet connection and try again."
     if isinstance(error, groq.NotFoundError):
-        return f"Model '{config.LLM_MODEL}' is not available on Groq. Set LLM_MODEL in .env to a current model."
+        return (f"Neither '{config.LLM_MODEL}' nor the fallback '{config.FALLBACK_MODEL}' is available on Groq. "
+                "Set LLM_MODEL in .env to a current model.")
     if isinstance(error, groq.APIStatusError):
         return f"Groq returned an error (HTTP {error.status_code}). Try again shortly."
     return f"The answer could not be generated ({type(error).__name__})."
@@ -96,6 +97,17 @@ class LLM:
         self.client = Groq(api_key=api_key)  # connect to Groq
         self.model = model
 
+    def _chat(self, **kwargs):
+        """One chat completion with self.model. If Groq has retired that model (e.g. an old LLM_MODEL left in
+        a deployment's secrets), switch to FALLBACK_MODEL once instead of failing every question."""
+        try:
+            return self.client.chat.completions.create(model=self.model, **kwargs)
+        except groq.NotFoundError:
+            if self.model == config.FALLBACK_MODEL:
+                raise
+            self.model = config.FALLBACK_MODEL
+            return self.client.chat.completions.create(model=self.model, **kwargs)
+
     def rewrite_question(self, question: str, history: list[dict]) -> str:
         """Chat memory for SEARCH: 'what about refunds for it?' -> 'What is the refund policy for gift cards?'"""
         if not history:  # first question, nothing to resolve
@@ -103,8 +115,7 @@ class LLM:
         recent = history[-config.HISTORY_TURNS:]  # only the last few messages
         transcript = "\n".join(f"{m['role'].upper()}: {m['content'][:500]}" for m in recent)  # cut long answers
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            response = self._chat(
                 messages=[
                     {"role": "system", "content": REWRITE_PROMPT},
                     {"role": "user", "content": f"Chat history:\n{transcript}\n\nLast question: {question}"},
@@ -138,8 +149,7 @@ class LLM:
         memory = [  # chat memory for the ANSWER: recent turns, content only
             {"role": m["role"], "content": m["content"][:800]} for m in (history or [])[-config.HISTORY_TURNS:]
         ]
-        response = self.client.chat.completions.create(
-            model=self.model,
+        response = self._chat(
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},  # the rules
                 *memory,  # what we talked about before

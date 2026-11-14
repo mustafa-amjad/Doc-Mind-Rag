@@ -373,7 +373,7 @@ with st.sidebar:
                                 f"in PDF and Word files. Slower; up to {config.MAX_OCR_PAGES} scanned pages and "
                                 f"{config.MAX_IMAGES_PER_FILE} pictures per file.")
         if not ocr_ready:
-            st.caption("OCR is not installed. Run `pip install -r requirements-ocr.txt` and restart.")
+            st.caption("OCR is not installed. Run `pip install -r requirements.txt` and restart.")
         describe_on = st.toggle("Describe charts and diagrams with AI", value=False,
                                 help=f"Sends each picture to the Groq vision model ({config.VISION_MODEL}) and "
                                      f"indexes its description, so questions about charts and diagrams can be "
@@ -451,7 +451,7 @@ with st.sidebar:
                 st.rerun()
             except ValueError as error:
                 st.error(str(error))
-    st.caption(f"Retrieval: {mode}, top {top_k}  \nModel: {md_escape(config.LLM_MODEL)} via Groq")
+    st.caption(f"Retrieval: {mode}, top {top_k}  \nModel: {md_escape(st.session_state.llm.model)} via Groq")
 
 # ====================== main area ======================
 typed = st.chat_input("Ask a question about your documents", disabled=not pipeline.is_ready)

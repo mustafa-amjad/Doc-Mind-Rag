@@ -65,7 +65,7 @@ flowchart LR
 - **Tables** in PDF, DOCX and HTML are kept row by row, with every value labelled by its column header (`Region: North | Sales: 120`), so table questions stay answerable after chunking
 - Web links are limited to public sites: localhost, private networks and cloud metadata addresses are blocked, redirects are re-checked, downloads are capped at 10 MB
 
-- **OCR for scans and pictures** (optional, pure pip): scanned PDF pages, image files, and the words inside charts and screenshots embedded in PDF and Word files. Mixed PDFs (typed + scanned pages) are handled page by page. Tiny icons and repeated logos are skipped. Evidence shows "OCR" / "Picture" badges because recognised text can contain small errors
+- **OCR for scans and pictures** (pure pip, installed with the app, can be switched off per upload): scanned PDF pages, image files, and the words inside charts and screenshots embedded in PDF and Word files. Mixed PDFs (typed + scanned pages) are handled page by page. Tiny icons and repeated logos are skipped. Evidence shows "OCR" / "Picture" badges because recognised text can contain small errors
 - **AI description of charts and diagrams** (optional toggle): each picture is sent to a Groq vision model (`VISION_MODEL`, default `qwen/qwen3.8-27b`) and its description is indexed, so "what does the chart on page 4 show?" can be answered
 
 **Retrieval**
@@ -96,7 +96,7 @@ flowchart LR
 | UI | Streamlit + custom CSS |
 | Storage | SQLite (stdlib) + files on disk |
 | Document parsing | pypdf, pdfplumber (tables), python-docx, BeautifulSoup, Pillow |
-| OCR (optional) | pypdfium2 + RapidOCR (`rapidocr` + ONNX Runtime) |
+| OCR | pypdfium2 + RapidOCR (`rapidocr` + ONNX Runtime) |
 | Chart / diagram description (optional) | Groq vision model (`VISION_MODEL`) |
 | Chunking | LangChain `RecursiveCharacterTextSplitter` |
 | Embeddings | `sentence-transformers/all-MiniLM-L6-v2` |
@@ -117,7 +117,7 @@ docmind-rag/
 │   ├── auth.py             # sign up / log in (PBKDF2) + login sessions
 │   ├── cookies.py          # read / write the 'stay logged in' cookie
 │   ├── loader.py           # PDF / DOCX / TXT / HTML / images / URL -> pages (tables + pictures)
-│   ├── ocr.py              # optional OCR for scanned pages and pictures
+│   ├── ocr.py              # OCR for scanned pages and pictures
 │   ├── chunker.py          # pages -> chunks
 │   ├── embedder.py         # text -> vectors
 │   ├── vector_store.py     # FAISS Flat / HNSW
@@ -135,7 +135,7 @@ docmind-rag/
 ├── .vscode/                # VS Code run + test config
 ├── Dockerfile  docker-compose.yml  .dockerignore
 ├── NOTICE  THIRD_PARTY_LICENSES.md  LICENSE
-├── .env.example  requirements.txt  requirements-ocr.txt
+├── .env.example  requirements.txt
 └── README.md
 ```
 
@@ -147,8 +147,7 @@ cd docmind-rag
 
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-pip install -r requirements-ocr.txt   # optional: read scans, images and text in charts
+pip install -r requirements.txt   # includes OCR for scans, images and text in charts
 
 cp .env.example .env             # Windows: copy .env.example .env
 # open .env and paste GROQ_API_KEY (free key: https://console.groq.com)
@@ -237,7 +236,7 @@ All defaults live in `docmind/config.py`. Override the common ones in `.env`:
 
 ## Known Limitations
 
-- OCR is optional, slower, and limited to 50 scanned pages and 40 pictures per file. Handwriting and low-quality scans can give wrong text.
+- OCR is slower than reading a text layer, and limited to 50 scanned pages and 40 pictures per file. Handwriting and low-quality scans can give wrong text.
 - OCR copies the words in a picture; it does not understand a chart. For that, turn on AI description (up to 20 pictures per file, uses Groq quota, and the model can misread values, so check the original for exact numbers).
 - PDF tables are found from their ruling lines. Tables drawn without lines are read as plain text. Pictures inside HTML pages are represented by their alt text only.
 - Password reset needs your saved recovery code (there is no email service). Lose both password and code and the account cannot be recovered.

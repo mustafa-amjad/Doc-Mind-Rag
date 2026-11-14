@@ -1,6 +1,0 @@
-# Optional: OCR for scanned PDFs. Install with: pip install -r requirements-ocr.txt
-# `rapidocr` replaces the old `rapidocr-onnxruntime` package, which has no builds for Python 3.13+.
-pypdfium2>=4.30
-rapidocr>=3.0
-onnxruntime>=1.20
-pillow>=10.0

@@ -19,8 +19,8 @@ DocMind uses the open-source components below. Licenses listed are what each pro
 | langchain-text-splitters | Chunking | MIT |
 | Groq Python SDK | LLM API client | Apache 2.0 |
 | python-dotenv | Config | BSD-3-Clause |
-| pypdfium2 (optional OCR) | Renders PDF pages to images | Apache 2.0 / BSD-3 (PDFium). Verify on its page. |
-| rapidocr + onnxruntime (optional OCR) | Reads text from images | Apache 2.0 / MIT (rapidocr downloads PaddleOCR model files, Apache 2.0) |
+| pypdfium2 (OCR) | Renders PDF pages to images | Apache 2.0 / BSD-3 (PDFium). Verify on its page. |
+| rapidocr + onnxruntime (OCR) | Reads text from images | Apache 2.0 / MIT (rapidocr downloads PaddleOCR model files, Apache 2.0) |
 | Pillow | Reading image files | MIT-CMU (HPND) |
 | Vision model via Groq (default `qwen/qwen3.8-27b`, optional) | Describing charts and diagrams | Set by the model publisher. Verify on the model card before commercial use. |
 | gpt-oss-120b by OpenAI (via Groq, default `LLM_MODEL`) | Answer generation | Apache 2.0 |

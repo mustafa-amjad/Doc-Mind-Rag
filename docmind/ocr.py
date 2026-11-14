@@ -1,5 +1,5 @@
-"""Optional OCR for scanned PDFs (pages that have no usable text layer).
-Needs: pip install -r requirements-ocr.txt  (pure pip, no Tesseract install).
+"""OCR for scanned PDF pages (no usable text layer), image files and pictures inside documents.
+Installed by requirements.txt (pure pip, no Tesseract install).
 
 Works with the maintained `rapidocr` package (v2/v3, supports Python 3.10-3.14) and
 falls back to the older `rapidocr_onnxruntime` package (Python <= 3.12) if that is
@@ -9,7 +9,7 @@ from functools import lru_cache
 
 from docmind import config
 
-INSTALL_HINT = "OCR libraries are missing. Run: pip install -r requirements-ocr.txt"
+INSTALL_HINT = "OCR libraries are missing. Run: pip install -r requirements.txt"
 _lock = threading.Lock()  # the OCR engine is not safe for two users at the same moment
 
 
