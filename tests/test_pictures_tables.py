@@ -7,7 +7,7 @@ from docx import Document
 from PIL import Image, ImageDraw
 
 from docmind import chunker, config, loader, ocr
-from docmind.llm import clean_model_text, image_to_data_url
+from docmind.llm import clean_model_text, image_to_data_url, normalize_citations
 from docmind.pipeline import RAGPipeline
 
 FONT_PATHS = [
@@ -288,6 +288,17 @@ def test_vision_failure_becomes_one_warning():
     describe = pipeline._safe_describer(warnings)
     assert describe(picture()) == "" and describe(picture()) == ""
     assert len(calls) == 1 and len(warnings) == 1 and "skipped" in warnings[0]
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("Sales were 95【1】.", "Sales were 95[1]."),
+    ("See 【2†L3-L5】 and 【 3 】.", "See [2] and [3]."),
+    ("Cost is $25 [1†prices.docx].", "Cost is $25 [1]."),
+    ("Already fine [1][2].", "Already fine [1][2]."),
+    ("Ranges like [a] stay.", "Ranges like [a] stay."),
+])
+def test_citations_are_normalized(raw, expected):
+    assert normalize_citations(raw) == expected
 
 
 def test_vision_helpers():

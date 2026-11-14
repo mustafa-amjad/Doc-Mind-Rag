@@ -25,7 +25,8 @@ SYSTEM_PROMPT = (
     "You are a careful assistant that answers questions about the user's documents. "
     "Use ONLY the numbered context below. If the answer is not in the context, say exactly: "
     "\"I couldn't find that in the uploaded documents.\" "
-    "Cite sources like [1] or [2] after each claim. Keep the answer short and clear."
+    "Cite sources with plain square brackets like [1] or [2] after each claim (never 【1】). "
+    "Keep the answer short and clear."
 )
 
 REWRITE_PROMPT = (
@@ -60,6 +61,12 @@ def image_to_data_url(image) -> str:
 def clean_model_text(text: str) -> str:
     """Drop <think>...</think> reasoning that some models print before the answer."""
     return re.sub(r"<think>.*?</think>", "", text or "", flags=re.DOTALL).strip()
+
+
+def normalize_citations(text: str) -> str:
+    """Some models cite as 【1】, 【1†L3-L5】 or [1†source]. Turn every form into the plain [1] the UI expects."""
+    text = re.sub(r"【\s*(\d+)[^】]*】", r"[\1]", text)
+    return re.sub(r"\[(\d+)†[^\]]*\]", r"[\1]", text)
 
 
 def build_context(chunks: list[dict]) -> str:
@@ -127,4 +134,4 @@ class LLM:
             ],
             temperature=0,  # 0 = no creativity, stick to the facts
         )
-        return response.choices[0].message.content
+        return normalize_citations(clean_model_text(response.choices[0].message.content))
