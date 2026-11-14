@@ -10,7 +10,8 @@ from docmind import auth, config, cookies, db, evidence, ocr
 from docmind.embedder import Embedder
 from docmind.llm import LLM, NOT_FOUND, friendly_error
 from docmind.loader import SUPPORTED_TYPES, fetch_url
-from docmind.pipeline import RAGPipeline, how_read
+from docmind.files import how_read
+from docmind.pipeline import RAGPipeline
 from docmind.reranker import Reranker
 
 DEFAULT_TITLE = "New chat"

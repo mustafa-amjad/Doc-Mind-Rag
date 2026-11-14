@@ -17,7 +17,8 @@ from pydantic import BaseModel, Field
 from docmind import auth, config, db, evidence
 from docmind.llm import LLM, friendly_error
 from docmind.loader import SUPPORTED_TYPES, fetch_url
-from docmind.pipeline import RAGPipeline, how_read
+from docmind.files import how_read
+from docmind.pipeline import RAGPipeline
 
 app = FastAPI(title="DocMind", docs_url="/api/docs", openapi_url="/api/openapi.json")
 db.init_db()
