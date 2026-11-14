@@ -105,9 +105,11 @@ class ImageReader:
     def active(self) -> bool:
         return self.use_ocr or self.describe is not None
 
-    def read(self, images: list, min_pixels: int | None = None) -> list[str]:
-        """PIL images -> one text block per useful picture (empty pictures are left out)."""
-        if not self.active:
+    def read(self, images: list, min_pixels: int | None = None, ocr: bool = True) -> list[str]:
+        """PIL images -> one text block per useful picture (empty pictures are left out).
+        ocr=False: describe only (used when the whole page is OCR'd separately)."""
+        use_ocr = self.use_ocr and ocr
+        if not (use_ocr or self.describe is not None):
             return []
         min_pixels = config.MIN_IMAGE_PIXELS if min_pixels is None else min_pixels
         picked = []
@@ -126,7 +128,7 @@ class ImageReader:
             return []
 
         texts = [""] * len(picked)
-        if self.use_ocr and self.ocr_left > 0:
+        if use_ocr and self.ocr_left > 0:
             batch = picked[: self.ocr_left]
             self.ocr_left -= len(batch)
             try:
@@ -222,8 +224,14 @@ def load_pdf(file_bytes: bytes, filename: str, use_ocr: bool = False,
                 text = ""
             if len(text) < config.OCR_MIN_CHARS:  # empty or nearly empty (a scan with a stamp / page number)
                 needs_ocr.append(page_number)
-                if text:
-                    pages[page_number] = {"text": text, "source": filename, "page": page_number}
+                entry = {"text": text, "source": filename, "page": page_number}
+                if describe is not None:  # e.g. a chart-only page: let the AI explain its pictures
+                    blocks = pictures.read(_pdf_page_images(page), ocr=False)  # whole-page OCR runs below
+                    if blocks:
+                        entry["text"] = "\n\n".join([text, *blocks]).strip()
+                        entry["image"] = True
+                if entry["text"]:
+                    pages[page_number] = entry
                 continue
 
             entry = {"text": text, "source": filename, "page": page_number}
@@ -251,8 +259,12 @@ def load_pdf(file_bytes: bytes, filename: str, use_ocr: bool = False,
         except RuntimeError as error:  # OCR libraries missing
             raise ValueError(str(error)) from None
         for page_number, text in scanned.items():
-            current = pages.get(page_number, {}).get("text", "")
-            if text and len(text) > len(current):  # keep whichever version has more text
+            current = pages.get(page_number, {})
+            if not text:
+                continue
+            if current.get("image"):  # keep the AI description of the page's pictures next to the OCR text
+                pages[page_number] = {**current, "text": f"{text}\n\n{current['text']}", "ocr": True}
+            elif len(text) > len(current.get("text", "")):  # keep whichever version has more text
                 pages[page_number] = {"text": text, "source": filename, "page": page_number, "ocr": True}
     return [pages[number] for number in sorted(pages)]  # keep reading order
 

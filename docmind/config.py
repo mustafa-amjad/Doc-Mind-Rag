@@ -8,7 +8,7 @@ load_dotenv()  # load .env into environment variables (does nothing if no .env)
 
 # ---- keys and model names ----
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")  # your Groq key, empty string if missing
-LLM_MODEL = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")  # the "kid" who writes answers
+LLM_MODEL = os.getenv("LLM_MODEL", "openai/gpt-oss-120b")  # the "kid" who writes answers
 EMBED_MODEL = os.getenv("EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2")  # text -> 384 numbers
 RERANK_MODEL = os.getenv("RERANK_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")  # the "strict teacher"
 

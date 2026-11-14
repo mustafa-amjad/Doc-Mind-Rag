@@ -53,7 +53,7 @@ flowchart LR
     E --> H[RRF fusion]
     F --> H
     H --> I[Cross-encoder<br/>re-ranker]
-    I --> J[Groq LLM<br/>Llama 3.3 70B]
+    I --> J[Groq LLM<br/>gpt-oss-120b]
     J --> K[Answer + page citations]
     K --> DB[(SQLite<br/>users, chats, messages)]
 ```
@@ -103,7 +103,7 @@ flowchart LR
 | Vector search | FAISS (Flat + HNSW) |
 | Keyword search | `rank-bm25` |
 | Re-ranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
-| LLM | Groq, `llama-3.3-70b-versatile` |
+| LLM | Groq, `openai/gpt-oss-120b` |
 | Tests | pytest |
 
 ## Project Structure
@@ -216,7 +216,7 @@ All defaults live in `docmind/config.py`. Override the common ones in `.env`:
 | Variable | Default | Meaning |
 |---|---|---|
 | `GROQ_API_KEY` | none | Required |
-| `LLM_MODEL` | `llama-3.3-70b-versatile` | Groq model |
+| `LLM_MODEL` | `openai/gpt-oss-120b` | Groq model |
 | `CHUNK_SIZE` | `800` | Characters per chunk |
 | `CHUNK_OVERLAP` | `100` | Overlap between chunks |
 
@@ -232,7 +232,7 @@ All defaults live in `docmind/config.py`. Override the common ones in `.env`:
 ## Licenses
 
 - This project: MIT (see `LICENSE`).
-- **Built with Llama.** Llama 3.3 is under the Llama 3.3 Community License and Meta's Acceptable Use Policy.
+- The default answer model, OpenAI's gpt-oss-120b (served by Groq), is released under Apache 2.0.
 - Other components are listed in `THIRD_PARTY_LICENSES.md`. Verify each one before commercial use.
 
 ## Known Limitations

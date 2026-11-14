@@ -7,7 +7,7 @@ from docx import Document
 from PIL import Image, ImageDraw
 
 from docmind import chunker, config, loader, ocr
-from docmind.llm import clean_model_text, image_to_data_url, normalize_citations
+from docmind.llm import NOT_FOUND, clean_model_text, image_to_data_url, normalize_citations, tidy_not_found
 from docmind.pipeline import RAGPipeline
 
 FONT_PATHS = [
@@ -31,9 +31,10 @@ def png_bytes(image: Image.Image) -> bytes:
     return buffer.getvalue()
 
 
-def text_pdf(with_table: bool = True, with_image: bool = True) -> bytes:
+def text_pdf(with_table: bool = True, with_image: bool = True, with_text: bool = True) -> bytes:
     """A real PDF with a text layer, a ruled 3x3 table and an embedded picture (written by hand)."""
-    ops = ["BT /F1 11 Tf 50 760 Td (Quarterly sales report for the northern and southern regions.) Tj ET"]
+    ops = ["BT /F1 11 Tf 50 760 Td (Quarterly sales report for the northern and southern regions.) Tj ET"] \
+        if with_text else []
     if with_table:
         x_lines, y_lines = [50, 200, 350, 500], [700, 670, 640, 610]
         for x in x_lines:
@@ -195,6 +196,34 @@ def test_ai_description_is_added_and_limited(monkeypatch):
     pages = loader.load_document(docx_with_table_and_pictures(images), "deck.docx", describe=describe)
     assert len(described) == 1
     assert "[Image description] A bar chart: North 120, South 95." in pages[0]["text"]
+
+
+@pytest.mark.parametrize("raw", [NOT_FOUND, NOT_FOUND + " [1]", NOT_FOUND + " [1][2]", NOT_FOUND[:-1] + " [1]."])
+def test_not_found_reply_has_no_citation(raw):
+    assert tidy_not_found(raw) == NOT_FOUND
+
+
+def test_real_answers_keep_their_citations():
+    assert tidy_not_found("Gift cards never expire. [1]") == "Gift cards never expire. [1]"
+
+
+def test_chart_only_pdf_page_gets_an_ai_description(fake_ocr):
+    """A page that is just a chart has almost no text layer; it must not be dropped when OCR is off."""
+    pdf = text_pdf(with_table=False, with_text=False)
+    pages = loader.load_document(pdf, "chart.pdf", describe=lambda image: "Bar chart: North 120, South 95.")
+    assert len(pages) == 1 and pages[0]["image"]
+    assert "[Image description] Bar chart: North 120, South 95." in pages[0]["text"]
+    assert fake_ocr == []  # describe only: pictures are not OCR'd separately
+
+
+def test_chart_only_page_keeps_description_after_page_ocr(fake_ocr, monkeypatch):
+    monkeypatch.setattr(ocr, "ocr_pdf_pages", lambda data, numbers: {n: "North 120 South 95" for n in numbers})
+    pdf = text_pdf(with_table=False, with_text=False)
+    pages = loader.load_document(pdf, "chart.pdf", use_ocr=True, describe=lambda image: "A bar chart.")
+    text = pages[0]["text"]
+    assert text.startswith("North 120 South 95") and "[Image description] A bar chart." in text
+    assert pages[0]["ocr"] and pages[0]["image"]
+    assert fake_ocr == []  # the whole page was OCR'd once, the picture was not OCR'd a second time
 
 
 # ---------------- image files ----------------

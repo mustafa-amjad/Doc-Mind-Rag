@@ -23,6 +23,6 @@ DocMind uses the open-source components below. Licenses listed are what each pro
 | rapidocr + onnxruntime (optional OCR) | Reads text from images | Apache 2.0 / MIT (rapidocr downloads PaddleOCR model files, Apache 2.0) |
 | Pillow | Reading image files | MIT-CMU (HPND) |
 | Vision model via Groq (default `qwen/qwen3.8-27b`, optional) | Describing charts and diagrams | Set by the model publisher. Verify on the model card before commercial use. |
-| Llama 3.3 70B (via Groq) | Answer generation | Llama 3.3 Community License + Meta Acceptable Use Policy. Show "Built with Llama" when you make a product available. |
+| gpt-oss-120b by OpenAI (via Groq, default `LLM_MODEL`) | Answer generation | Apache 2.0 |
 
 Using Groq's API is also subject to Groq's own Terms of Service and data policy.

@@ -21,10 +21,16 @@ def friendly_error(error: Exception) -> str:
         return f"Groq returned an error (HTTP {error.status_code}). Try again shortly."
     return f"The answer could not be generated ({type(error).__name__})."
 
+NOT_FOUND = "I couldn't find that in the uploaded documents."
+
 SYSTEM_PROMPT = (
     "You are a careful assistant that answers questions about the user's documents. "
-    "Use ONLY the numbered context below. If the answer is not in the context, say exactly: "
-    "\"I couldn't find that in the uploaded documents.\" "
+    "Use ONLY the numbered context below. "
+    "If the question states or assumes a fact that the context contradicts (for example a wrong number, "
+    "date or rule), do not accept it: start with 'The documents say otherwise:' and give what the context "
+    "actually says, with its citation. "
+    "Otherwise, if the answer is not in the context, say exactly: "
+    f"\"{NOT_FOUND}\" "
     "Cite sources with plain square brackets like [1] or [2] after each claim (never 【1】). "
     "Keep the answer short and clear."
 )
@@ -67,6 +73,13 @@ def normalize_citations(text: str) -> str:
     """Some models cite as 【1】, 【1†L3-L5】 or [1†source]. Turn every form into the plain [1] the UI expects."""
     text = re.sub(r"【\s*(\d+)[^】]*】", r"[\1]", text)
     return re.sub(r"\[(\d+)†[^\]]*\]", r"[\1]", text)
+
+
+def tidy_not_found(text: str) -> str:
+    """'I couldn't find that... [1]' -> the plain sentence: a not-found reply has no source to cite."""
+    if re.fullmatch(re.escape(NOT_FOUND.rstrip(".")) + r"\.?(\s*\[\d+\])*\.?", text.strip()):
+        return NOT_FOUND
+    return text
 
 
 def build_context(chunks: list[dict]) -> str:
@@ -121,7 +134,7 @@ class LLM:
 
     def answer(self, question: str, chunks: list[dict], history: list[dict] | None = None) -> str:
         if not chunks:  # nothing retrieved -> do not waste an API call
-            return "I couldn't find that in the uploaded documents."
+            return NOT_FOUND
         memory = [  # chat memory for the ANSWER: recent turns, content only
             {"role": m["role"], "content": m["content"][:800]} for m in (history or [])[-config.HISTORY_TURNS:]
         ]
@@ -134,4 +147,4 @@ class LLM:
             ],
             temperature=0,  # 0 = no creativity, stick to the facts
         )
-        return normalize_citations(clean_model_text(response.choices[0].message.content))
+        return tidy_not_found(normalize_citations(clean_model_text(response.choices[0].message.content)))
