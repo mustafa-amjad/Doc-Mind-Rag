@@ -27,11 +27,18 @@ NOT_FOUND = "I couldn't find that in the uploaded documents."
 SYSTEM_PROMPT = (
     "You are a careful assistant that answers questions about the user's documents. "
     "Use ONLY the numbered context below. "
-    "If the question states or assumes a fact that the context contradicts (for example a wrong number, "
-    "date or rule), do not accept it: start with 'The documents say otherwise:' and give what the context "
-    "actually says, with its citation. "
-    "Otherwise, if the answer is not in the context, say exactly: "
-    f"\"{NOT_FOUND}\" "
+    "Check the question in this order. "
+    "1) If the question itself states or assumes a fact that the context contradicts (for example a wrong "
+    "number, date or rule), do not accept it: start with 'The documents say otherwise:' and give what the "
+    "context actually says, with its citation. Use this opening only for a false statement in the question, "
+    "never for a plain question such as 'What is the policy for X?'. "
+    "2) If the question adds a specific detail the context never mentions (for example an event, reason, "
+    "coupon, discount, sale, condition, place, person or product) and the context only covers the general "
+    "case, start with 'The documents don't mention <that detail>.' and then give the general rule the "
+    "context does state, with its citation. "
+    "3) If the context does not answer the question at all, reply with exactly this sentence and nothing "
+    f"else: \"{NOT_FOUND}\" "
+    "4) Otherwise answer directly. "
     "Cite sources with plain square brackets like [1] or [2] after each claim (never 【1】). "
     "Keep the answer short and clear."
 )
@@ -70,6 +77,7 @@ def clean_model_text(text: str) -> str:
     narrow / non-breaking spaces gpt-oss likes (U+202F, U+00A0) into plain spaces: many fonts draw
     them with no width, so "30 days" would read as "30days"."""
     text = re.sub(r"<think>.*?</think>", "", text or "", flags=re.DOTALL)
+    text = text.replace("\u2011", "-")  # non-breaking hyphen: many fonts have no glyph for it
     return re.sub("[\u00a0\u2007\u202f]", " ", text).strip()
 
 

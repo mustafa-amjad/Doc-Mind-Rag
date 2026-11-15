@@ -82,7 +82,7 @@ def cited_numbers(text: str, sources: list[dict]) -> list[int]:
 
 def answer_markdown(text: str) -> str:
     """Show [1] citation markers as small emerald badges, like the web app."""
-    text = re.sub("[\u00a0\u2007\u202f]", " ", text)  # older saved answers: fonts draw these with no width
+    text = re.sub("[\u00a0\u2007\u202f]", " ", text).replace("\u2011", "-")  # older saved answers: odd spaces/hyphens
     return re.sub(r"\s*\[(\d+)\]", r" :green-badge[\1]", text)
 
 
