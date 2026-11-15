@@ -604,7 +604,15 @@ if st.session_state.get("new_recovery_code"):  # must see the code before using 
     render_recovery_code_screen(st.session_state.new_recovery_code)
     st.stop()
 
-api_key = config.GROQ_API_KEY or st.session_state.get("visitor_groq_key", "")
+def secret_groq_key() -> str:
+    """GROQ_API_KEY from Streamlit secrets, read on every run so a newly saved secret works without a restart."""
+    try:
+        return str(st.secrets.get("GROQ_API_KEY", "") or "")
+    except Exception:  # no secrets file (local runs use .env)
+        return ""
+
+
+api_key = config.GROQ_API_KEY or secret_groq_key() or st.session_state.get("visitor_groq_key", "")
 if not api_key:  # no server key (e.g. public demo) -> let the visitor use their own
     st.info("This demo runs on Groq. Add your own free API key to continue.", icon=":material/key:")
     with st.form("groq_key"):
