@@ -1,4 +1,5 @@
 """DocMind: Streamlit UI with login, saved chats, pinned chats and chat memory.
+Layout: chats on the left, the conversation in the middle, the chat's documents on the right.
 Run with:  streamlit run app.py"""
 import html  # escapes the username in the account row
 import re  # used to clean whitespace in snippets
@@ -16,6 +17,7 @@ from docmind.pipeline import RAGPipeline
 from docmind.reranker import Reranker
 
 DEFAULT_TITLE = "New chat"
+PLAN = "Free plan"  # every DocMind account is free; there are no paid plans
 
 st.set_page_config(  # must be the FIRST Streamlit call
     page_title="DocMind",
@@ -59,18 +61,7 @@ def index_folder(user_id: int, chat_id: int) -> Path:
     return config.INDEX_DIR / str(user_id) / str(chat_id)
 
 
-# ====================== rendering helpers ======================
-def unique_pages(sources: list[dict]) -> list[str]:
-    """'report.pdf, p. 3' once per file+page, in the order they were cited."""
-    seen, labels = set(), []
-    for src in sources:
-        key = (src["source"], src["page"])
-        if key not in seen:
-            seen.add(key)
-            labels.append(f"{src['source']}, p. {src['page']}")
-    return labels
-
-
+# ====================== answers ======================
 def cited_numbers(text: str, sources: list[dict]) -> list[int]:
     """[n] markers the answer actually uses, in order, that point at a real source."""
     found = []
@@ -83,12 +74,12 @@ def cited_numbers(text: str, sources: list[dict]) -> list[int]:
 
 def answer_markdown(text: str) -> str:
     """Show [1] citation markers as small emerald badges, like the web app."""
-    text = re.sub("[\u00a0\u2007\u202f]", " ", text).replace("\u2011", "-")  # older saved answers: odd spaces/hyphens
+    text = re.sub("[   ]", " ", text).replace("‑", "-")  # older saved answers: odd spaces/hyphens
     return re.sub(r"\s*\[(\d+)\]", r" :green-badge[\1]", text)
 
 
 def render_answer(message: dict, index: int, question: str = "") -> None:
-    """One saved answer: status badge, text with citation badges, source buttons for the viewer, details."""
+    """One saved answer: status badge, text with citation badges, source buttons (open the page), details."""
     sources, content = message.get("sources", []), message["content"]
     numbers = cited_numbers(content, sources)
     if content.strip() == NOT_FOUND:
@@ -101,11 +92,9 @@ def render_answer(message: dict, index: int, question: str = "") -> None:
         with st.container(horizontal=True, gap="small"):
             for n in numbers:
                 src = sources[n - 1]
-                active = st.session_state.get("viewer") == (index, n)
                 if st.button(f"{n} · {src['source']} · p.{src['page']}", key=f"cite_{index}_{n}",
-                             type="primary" if active else "secondary", icon=":material/description:"):
-                    st.session_state.viewer = (index, n)
-                    st.rerun()
+                             icon=":material/description:", help="Open the page with the cited sentence highlighted"):
+                    source_dialog(index, n)
     if sources:
         render_answer_extras(sources, message.get("meta", ""), message.get("searched", ""), question)
 
@@ -144,45 +133,36 @@ def readable_passage(text: str, sentences: list[str]) -> str:
     return marked
 
 
-def render_viewer(messages: list[dict], user_id: int, chat_id: int | None) -> None:
-    """Right-hand source viewer: the page behind the selected citation, with the sentences highlighted."""
-    choice = st.session_state.get("viewer")
-    if not choice or choice[0] >= len(messages) or messages[choice[0]]["role"] != "assistant":
-        choice = None
-        for index in range(len(messages) - 1, -1, -1):  # default: newest answer that cites something
-            message = messages[index]
-            if message["role"] == "assistant":
-                numbers = cited_numbers(message["content"], message.get("sources", []))
-                if numbers:
-                    choice = (index, numbers[0])
-                    break
-    with st.container(border=True, key="viewer"):
-        if not choice:
-            st.markdown("#### Source")
-            st.caption("Pick a numbered source under an answer to see the page it came from.")
-            return
-        message = messages[choice[0]]
-        source = message["sources"][choice[1] - 1]
-        with st.container(key="viewer_head"):
-            st.markdown(f":green-badge[{choice[1]}] **{md_escape(source['source'])}**")
-            notes = [f"Page {source['page']}"] + (["read with OCR"] if source.get("ocr") else []) \
-                + (["includes a picture"] if source.get("image") else [])
-            st.caption(" · ".join(notes))
-        sentences = evidence.pick_sentences(source["text"], message["content"])
-        stored = index_folder(user_id, chat_id) / "files" / Path(source["source"]).name if chat_id else None
-        shown_page = False
-        if stored and stored.exists() and stored.suffix.lower() == ".pdf":
-            try:
-                image, found = highlighted_page(str(stored), stored.stat().st_mtime, int(source["page"]), tuple(sentences))
-                st.image(image, width="stretch")
-                shown_page = True
-                if not found and sentences:  # scanned page: show the OCR text with the sentence marked
-                    st.caption("Text read from this page" + (" with OCR" if source.get("ocr") else ""))
-                    st.markdown(readable_passage(source["text"], sentences))
-            except Exception:
-                shown_page = False
-        if not shown_page:
-            st.markdown(readable_passage(source["text"], sentences))
+def source_page(message: dict, number: int, user_id: int, chat_id: int | None) -> None:
+    """The page behind one citation, with the cited sentences highlighted."""
+    source = message["sources"][number - 1]
+    notes = [f"Page {source['page']}"] + (["read with OCR"] if source.get("ocr") else []) \
+        + (["includes a picture"] if source.get("image") else [])
+    st.markdown(f":green-badge[{number}] **{md_escape(source['source'])}**")
+    st.caption(" · ".join(notes))
+    sentences = evidence.pick_sentences(source["text"], message["content"])
+    stored = index_folder(user_id, chat_id) / "files" / Path(source["source"]).name if chat_id else None
+    shown_page = False
+    if stored and stored.exists() and stored.suffix.lower() == ".pdf":
+        try:
+            image, found = highlighted_page(str(stored), stored.stat().st_mtime, int(source["page"]), tuple(sentences))
+            st.image(image, width="stretch")
+            shown_page = True
+            if not found and sentences:  # scanned page: show the OCR text with the sentence marked
+                st.caption("Text read from this page" + (" with OCR" if source.get("ocr") else ""))
+                st.markdown(readable_passage(source["text"], sentences))
+        except Exception:
+            shown_page = False
+    if not shown_page:
+        st.markdown(readable_passage(source["text"], sentences))
+
+
+@st.dialog("Source", width="large")
+def source_dialog(message_index: int, number: int) -> None:
+    """Opens from a source button under an answer: the real page, the cited sentence highlighted."""
+    messages = st.session_state.messages
+    if message_index < len(messages) and messages[message_index]["role"] == "assistant":
+        source_page(messages[message_index], number, st.session_state.user["id"], st.session_state.chat_id)
 
 
 def render_answer_extras(sources: list[dict], meta: str, searched: str = "", question: str = "") -> None:
@@ -209,69 +189,6 @@ def render_answer_extras(sources: list[dict], meta: str, searched: str = "", que
                 st.caption(md_escape(shorten(src["text"], 1200)))
 
 
-def model_label() -> str:
-    """'gpt-oss-120b' for 'openai/gpt-oss-120b'."""
-    llm = st.session_state.get("llm")
-    return (llm.model if llm else config.LLM_MODEL).split("/")[-1]
-
-
-@st.cache_data(ttl=86400, show_spinner=False)
-def context_window(model: str, _client) -> int | None:
-    """The model's context window in tokens, as Groq reports it (None if Groq doesn't say)."""
-    try:
-        return int(getattr(_client.models.retrieve(model), "context_window", 0) or 0) or None
-    except Exception:
-        return None
-
-
-def file_icon(name: str) -> str:
-    suffix = Path(name).suffix.lower()
-    if suffix == ".pdf":
-        return ":material/picture_as_pdf:"
-    if suffix in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff"}:
-        return ":material/image:"
-    if suffix in {".html", ".htm"}:
-        return ":material/language:"
-    return ":material/description:"
-
-
-BOX_FILES = ":small[:gray[:material/folder_open: In this chat]]"
-NEW_LINE = "  \n"  # markdown line break: label on top, value under it, in one block
-
-
-def render_overview(pipeline: RAGPipeline, chat_id: int | None, mode: str, top_k: int, memory: bool) -> None:
-    """Three boxes under the header: what this chat contains, how full the context window is, which model answers."""
-    llm = st.session_state.llm
-    with st.container(horizontal=True, gap="small", key="overview"):
-        with st.container(border=True, key="box_files"):
-            if pipeline.is_ready:
-                stats = st.session_state.stats or pipeline.stats()
-                files = stats["files"]
-                st.markdown(BOX_FILES + NEW_LINE + f"**{files} file{'s' if files != 1 else ''}** · "
-                            f"{stats['pages']} pages · {stats['chunks']} passages")
-                with st.container(horizontal=True, gap="xxsmall", key="file_chips"):
-                    for name in pipeline.file_names[:4]:
-                        st.badge(shorten(name, 26), icon=file_icon(name), color="gray")
-                    if len(pipeline.file_names) > 4:
-                        st.badge(f"+{len(pipeline.file_names) - 4} more", color="gray")
-            else:
-                st.markdown(BOX_FILES + NEW_LINE + "**No files yet**")
-                st.caption("Add files from the sidebar.")
-        with st.container(border=True, key="box_context"):
-            window = context_window(llm.model, llm.client)
-            used = (st.session_state.get("context_usage") or {}).get(chat_id)
-            tokens = used["prompt_tokens"] if used else 0
-            st.markdown(":small[:gray[:material/memory: Context window]]" + NEW_LINE
-                        + f"**{tokens:,}**" + (f" of {window:,} tokens" if window else " tokens"))
-            if window:
-                st.progress(min(tokens / window, 1.0))
-            st.caption(f"Last question: rules, {used['passages']} passages and recent chat" if used
-                       else "Fills as you ask: the rules, the passages found and recent chat")
-        with st.container(border=True, key="box_model"):
-            st.markdown(":small[:gray[:material/neurology: Model]]" + NEW_LINE + f"**{md_escape(model_label())}** · Groq")
-            st.caption(f"{mode} · {top_k} passages per answer · memory {'on' if memory else 'off'}")
-
-
 def chat_to_markdown(title: str, messages: list[dict]) -> str:
     """Turn the chat into a .md file the user can download."""
     lines = [f"# {title}", ""]
@@ -286,25 +203,175 @@ def chat_to_markdown(title: str, messages: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def page_header(title: str = "Sign in to DocMind", note: str = "") -> None:
-    """Title block for the sign-in screens."""
-    st.space("large")
-    st.title(title, anchor=False)
-    if note:
-        st.caption(note)
+# ====================== models (picker under the message box) ======================
+@st.cache_data(ttl=3600, show_spinner=False)
+def answer_models(_client) -> list[dict]:
+    """Groq models that can write DocMind's answers, with their context windows (live from Groq).
+    Speech, transcription, safety-filter and tiny-window models are left out."""
+    try:
+        listed = _client.models.list().data
+    except Exception:
+        return []
+    models = []
+    for model in listed:
+        info = model.model_dump()
+        window = int(info.get("context_window") or 0)
+        if (info.get("active", True) and info.get("output_modalities", ["text"]) == ["text"]
+                and "text" in (info.get("input_modalities") or ["text"]) and window >= 32_000
+                and "guard" not in model.id and "whisper" not in model.id):
+            models.append({"id": model.id, "context_window": window})
+    return sorted(models, key=lambda m: (m["id"] != config.LLM_MODEL, m["id"]))  # default first, then A-Z
 
 
-def getting_started() -> None:
-    """Empty state: three numbered steps in one panel, divided by lines."""
-    steps = [("1", "Add files", "Use Add files in the sidebar: PDFs, Word files, images or a link."),
-             ("2", "Ask a question", "Type in the box below. Follow-up questions keep their context."),
-             ("3", "Check the source", "Each answer opens the page it came from, with the sentence highlighted.")]
+def short_model(model_id: str) -> str:
+    """'gpt-oss-120b' for 'openai/gpt-oss-120b'."""
+    return model_id.split("/")[-1]
+
+
+# ====================== documents (right panel) ======================
+def file_icon(name: str) -> str:
+    suffix = Path(name).suffix.lower()
+    if suffix == ".pdf":
+        return ":material/picture_as_pdf:"
+    if suffix in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff"}:
+        return ":material/image:"
+    if suffix in {".html", ".htm"}:
+        return ":material/language:"
+    return ":material/description:"
+
+
+def file_rows(chunks: list[dict]) -> list[dict]:
+    """One row per indexed file: pages, passages and how it was read."""
+    rows = {}
+    for chunk in chunks:
+        row = rows.setdefault(chunk["source"], {"name": chunk["source"], "pages": set(), "passages": 0})
+        row["pages"].add(chunk["page"])
+        row["passages"] += 1
+    return [{"name": r["name"], "pages": len(r["pages"]), "passages": r["passages"],
+             "read_as": how_read(chunks, r["name"])} for r in rows.values()]
+
+
+TAG_COLORS = {"Text": "gray", "Table": "blue", "Picture": "violet", "OCR": "orange"}
+
+
+def last_cited_files(messages: list[dict]) -> set[str]:
+    """Files the newest answer cites (their cards get an emerald outline)."""
+    for message in reversed(messages):
+        if message["role"] == "assistant":
+            sources = message.get("sources", [])
+            return {sources[n - 1]["source"] for n in cited_numbers(message["content"], sources)}
+    return set()
+
+
+def render_documents_panel(pipeline: RAGPipeline, chat_id: int | None, messages: list[dict]) -> None:
+    """Right panel: this chat's documents as a grid of cards. Untick a card to leave it out of answers."""
+    with st.container(key="docs_panel"):
+        st.html('<p class="panel-title">Documents</p>')
+        if not pipeline.is_ready:
+            st.caption("No documents in this chat yet. Attach files with the + in the message box, "
+                       "or add a link below.")
+        else:
+            rows = file_rows(pipeline.chunks)
+            stats = st.session_state.stats or pipeline.stats()
+            st.caption(f"{len(rows)} file{'s' if len(rows) != 1 else ''} · {stats['pages']} pages · "
+                       f"{stats['chunks']} passages")
+            cited = last_cited_files(messages)
+            with st.container(horizontal=True, gap="small", key="doc_grid"):
+                for number, row in enumerate(rows):
+                    with st.container(border=True, key=f"dcard_{number}" + ("_cited" if row["name"] in cited else "")):
+                        st.markdown(f"{file_icon(row['name'])} **{md_escape(shorten(row['name'], 40))}**")
+                        st.caption(f"{row['pages']} page{'s' if row['pages'] != 1 else ''} · "
+                                   f"{row['passages']} passage{'s' if row['passages'] != 1 else ''}")
+                        with st.container(horizontal=True, gap="xxsmall"):
+                            for tag in row["read_as"]:
+                                st.badge(tag, color=TAG_COLORS.get(tag, "gray"))
+                        st.checkbox("Use in answers", value=True, key=f"use_{chat_id}_{row['name']}",
+                                    help="Untick to leave this file out of the search (a filter applied inside "
+                                         "both searches).")
+        with st.form(f"link_form_{chat_id}", border=False, clear_on_submit=True):
+            link = st.text_input("Add a link", placeholder="Web page or PDF link", label_visibility="collapsed")
+            if st.form_submit_button("Add link", icon=":material/link:", width="stretch") and link.strip():
+                st.session_state.pending_link = link.strip()
+        for warning in st.session_state.get("ingest_warnings", []):  # e.g. vision model unavailable
+            st.warning(warning, icon=":material/warning:")
+
+
+def search_scope(pipeline: RAGPipeline, chat_id: int | None) -> list[str]:
+    """Files ticked in the documents panel; [] means every file (nothing unticked)."""
+    if not pipeline.is_ready:
+        return []
+    ticked = [name for name in pipeline.file_names if st.session_state.get(f"use_{chat_id}_{name}", True)]
+    return [] if len(ticked) == len(pipeline.file_names) else ticked
+
+
+def add_files_to_chat(files: list[tuple[str, bytes]]) -> None:
+    """Read files into this chat (with the reading options from the sidebar), save them, report back."""
+    pipeline: RAGPipeline = st.session_state.pipeline
+    user_id = st.session_state.user["id"]
+    use_ocr = st.session_state.get("opt_ocr", ocr.is_available()) and ocr.is_available()
+    describe = st.session_state.get("opt_describe", False)
+    st.session_state.stats = pipeline.ingest(files, append=True, ocr=use_ocr, describe_images=describe)
+    if st.session_state.chat_id is None:  # first save: create the chat now
+        st.session_state.chat_id = db.create_chat(user_id, Path(files[0][0]).stem[:40] or DEFAULT_TITLE)
+    saved = index_folder(user_id, st.session_state.chat_id)
+    pipeline.save(saved)  # keep the index for later
+    (saved / "files").mkdir(parents=True, exist_ok=True)
+    for name, data in files:  # originals, so the source pop-up can show the real page
+        (saved / "files" / Path(name).name).write_bytes(data)
+    stats = st.session_state.stats
+    message = f"Added {len(files)} file{'s' if len(files) != 1 else ''}."
+    if stats.get("ocr_pages"):
+        message += f" {stats['ocr_pages']} scanned page{'s' if stats['ocr_pages'] != 1 else ''} read."
+    if stats.get("image_pages"):
+        message += f" Text found in pictures on {stats['image_pages']} page{'s' if stats['image_pages'] != 1 else ''}."
+    st.session_state.flash = message
+    st.session_state.ingest_warnings = stats.get("warnings", [])
+
+
+# ====================== conversation (center) ======================
+def welcome() -> None:
+    """Empty chat: what DocMind does, in three steps."""
+    st.html('<div class="hello"><h2>Ask your documents</h2>'
+            '<p>Answers come only from your files, and every answer shows the page it came from.</p></div>')
+    steps = [("1", "Attach files", "Use the + in the message box: PDFs, Word files, text, images. "
+                                   "Or add a link on the right."),
+             ("2", "Ask a question", "Follow-up questions keep their context."),
+             ("3", "Check the source", "Click a source under an answer to open its page, sentence highlighted.")]
     with st.container(horizontal=True, gap=None, key="steps"):
         for number, title, text in steps:
             with st.container(key=f"step_{number}"):
                 st.html(f'<span class="step-num">{number}</span>')
                 st.markdown(f"**{title}**")
                 st.caption(text)
+
+
+def render_composer(chat_id: int | None, has_files: bool):
+    """Message box (attach files with the +) and, under it, the model picker and token use."""
+    with st.container(key="composer"):
+        value = st.chat_input("Ask about your documents" if has_files else "Attach files with +, then ask",
+                              accept_file="multiple", file_type=SUPPORTED_TYPES, key="ask_box")
+        llm = st.session_state.llm
+        models = answer_models(llm.client) or [{"id": llm.model, "context_window": None}]
+        ids = [m["id"] for m in models]
+        if llm.model not in ids:
+            ids.insert(0, llm.model)
+        with st.container(horizontal=True, vertical_alignment="center", gap="small", key="composer_meta"):
+            chosen = st.selectbox("Model", ids, index=ids.index(llm.model), format_func=short_model,
+                                  key="model_choice", label_visibility="collapsed", width=210,
+                                  help="Groq model that writes the answers. The list comes live from Groq.")
+            llm.model = chosen
+            window = next((m["context_window"] for m in models if m["id"] == chosen), None)
+            used = (st.session_state.get("context_usage") or {}).get(chat_id)
+            tokens = used["prompt_tokens"] if used else 0
+            st.space("stretch")
+            text = f"{tokens:,} / {window:,} tokens" if window else f"{tokens:,} tokens"
+            st.markdown(f":small[:gray[:material/memory: {text}]]",
+                        help="Tokens the last answer sent to the model (rules, passages found and recent chat), "
+                             "out of the model's context window.")
+            if window:
+                with st.container(width=90, key="token_bar"):
+                    st.progress(min(tokens / window, 1.0))
+    return value
 
 
 # ====================== session state: which user, which chat ======================
@@ -320,8 +387,6 @@ def new_chat() -> None:
     st.session_state.stats = None
     st.session_state.confirm_delete = None
     st.session_state.ingest_warnings = []
-    st.session_state.viewer = None
-    st.session_state.want_tab = "Documents"  # a new chat starts by adding files
 
 
 def open_chat(chat_id: int) -> None:
@@ -338,24 +403,30 @@ def open_chat(chat_id: int) -> None:
     st.session_state.pipeline = pipeline
     st.session_state.confirm_delete = None
     st.session_state.ingest_warnings = []
-    st.session_state.viewer = None
-    st.session_state.want_tab = "Chat" if st.session_state.stats else "Documents"
 
 
 def start_login(user: dict) -> None:
-    """Log in for this tab AND remember the user in a browser cookie (survives refresh)."""
+    """Log in for this tab AND remember the user in the browser (survives refresh)."""
     st.session_state.user = user
     cookies.queue_set(auth.create_session(user["id"]))
 
 
 def logout() -> None:
-    auth.end_session(cookies.read_token())  # kill the saved login so the old cookie stops working
-    cookies.queue_clear()  # and remove the cookie from the browser
-    for key in ("user", "chat_id", "messages", "pipeline", "stats", "confirm_delete", "pending_question", "viewer", "prefs"):
+    auth.end_session(cookies.read_token())  # kill the saved login so the old token stops working
+    cookies.queue_clear()  # and remove it from the browser
+    for key in ("user", "chat_id", "messages", "pipeline", "stats", "confirm_delete", "pending_question", "prefs"):
         st.session_state.pop(key, None)
 
 
 # ====================== login screen ======================
+def page_header(title: str = "Sign in to DocMind", note: str = "") -> None:
+    """Title block for the sign-in screens."""
+    st.space("large")
+    st.title(title, anchor=False)
+    if note:
+        st.caption(note)
+
+
 def render_auth() -> None:
     _, middle, _ = st.columns([1, 1.3, 1])
     with middle:
@@ -429,8 +500,16 @@ def render_recovery_code_screen(code: str) -> None:
 
 
 # ====================== sidebar: chat list ======================
+@st.dialog("Rename chat")
+def rename_dialog(chat_id: int, title: str) -> None:
+    new_title = st.text_input("Chat name", value=title, max_chars=60)
+    if st.button("Save", type="primary"):
+        db.rename_chat(chat_id, st.session_state.user["id"], new_title.strip() or title)
+        st.rerun()
+
+
 def chat_row(chat: dict, active: bool, user_id: int) -> None:
-    """One line in Pinned / Recent: open button, pin button, delete button."""
+    """One line in Pinned / Recents: open the chat, or use its "..." menu (pin, rename, export, delete)."""
     chat_id = chat["id"]
     if st.session_state.get("confirm_delete") == chat_id:  # second click: ask before deleting
         st.caption(f"Delete “{md_escape(shorten(chat['title'], 28))}”?")
@@ -452,108 +531,19 @@ def chat_row(chat: dict, active: bool, user_id: int) -> None:
             open_chat(chat_id)
             st.rerun()
         with st.popover("", icon=":material/more_horiz:", type="tertiary", key=f"menu_{chat_id}"):
-            if st.button("Unpin" if chat["pinned"] else "Pin to top", key=f"pin_{chat_id}", type="tertiary",
+            if st.button("Unpin" if chat["pinned"] else "Pin", key=f"pin_{chat_id}", type="tertiary",
                          icon=":material/keep_off:" if chat["pinned"] else ":material/keep:"):
                 db.set_pinned(chat_id, user_id, not chat["pinned"])
                 st.rerun()
+            if st.button("Rename", key=f"ren_{chat_id}", type="tertiary", icon=":material/edit:"):
+                rename_dialog(chat_id, chat["title"])
+            if active and st.session_state.messages:
+                st.download_button("Export", data=chat_to_markdown(chat["title"], st.session_state.messages),
+                                   file_name="docmind_chat.md", mime="text/markdown", type="tertiary",
+                                   icon=":material/download:", key=f"exp_{chat_id}")
             if st.button("Delete", key=f"del_{chat_id}", type="tertiary", icon=":material/delete:"):
                 st.session_state.confirm_delete = chat_id
                 st.rerun()
-
-
-def file_rows(chunks: list[dict]) -> list[dict]:
-    """One row per indexed file: pages, passages and how it was read."""
-    rows = {}
-    for chunk in chunks:
-        row = rows.setdefault(chunk["source"], {"File": chunk["source"], "pages": set(), "Passages": 0})
-        row["pages"].add(chunk["page"])
-        row["Passages"] += 1
-    return [{"File": r["File"], "Pages": len(r["pages"]), "Passages": r["Passages"],
-             "Read as": how_read(chunks, r["File"])} for r in rows.values()]
-
-
-def add_files_panel(pipeline: RAGPipeline, user_id: int) -> None:
-    """Upload, link and reading options, then index into this chat (shown in the sidebar)."""
-    with st.container(key="upload"):
-        uploads = st.file_uploader("Files", type=SUPPORTED_TYPES, accept_multiple_files=True,
-                                   label_visibility="collapsed", key=f"upload_{st.session_state.chat_id}",
-                                   help="PDF, DOCX, TXT, MD, HTML or an image (PNG, JPG, WEBP, BMP, GIF, TIFF)")
-        link = st.text_input("Link", placeholder="Paste a web page or PDF link",
-                             key=f"link_{st.session_state.chat_id}").strip()
-        ocr_ready = ocr.is_available()
-        ocr_on = st.toggle("Read scans and images", value=ocr_ready, disabled=not ocr_ready,
-                           help=f"Reads scanned PDF pages, image files, and the words inside charts and screenshots "
-                                f"in PDF and Word files. Slower; up to {config.MAX_OCR_PAGES} scanned pages and "
-                                f"{config.MAX_IMAGES_PER_FILE} pictures per file.")
-        if not ocr_ready:
-            st.caption("OCR is not installed. Run `pip install -r requirements.txt` and restart.")
-        describe_on = st.toggle("Describe charts with AI", value=False,
-                                help=f"Sends each picture to the Groq vision model ({config.VISION_MODEL}) and "
-                                     f"indexes its description, so questions about charts and diagrams can be "
-                                     f"answered. Up to {config.MAX_VISION_IMAGES} pictures per file; uses API quota.")
-        add_mode = True
-        if pipeline.is_ready:  # chat already has documents -> let the user choose
-            add_mode = st.segmented_control("New files", ["Add to these", "Replace these"], default="Add to these",
-                                            key=f"mode_{st.session_state.chat_id}") != "Replace these"
-        if st.button("Add to chat", type="primary", width="stretch", disabled=not (uploads or link)):
-            slow = " Scans and images take a little longer." if (ocr_on or describe_on) else ""
-            with st.spinner("Reading your files..." + slow):
-                try:
-                    files = [(f.name, f.getvalue()) for f in uploads]
-                    if link:  # download the link (public sites only)
-                        files.append(fetch_url(link))
-                    st.session_state.stats = pipeline.ingest(files, append=add_mode, ocr=ocr_on,
-                                                             describe_images=describe_on)
-                    if st.session_state.chat_id is None:  # first save: create the chat now
-                        title = Path(files[0][0]).stem[:40] or DEFAULT_TITLE
-                        st.session_state.chat_id = db.create_chat(user_id, title)
-                    saved = index_folder(user_id, st.session_state.chat_id)
-                    pipeline.save(saved)  # keep the index for later
-                    (saved / "files").mkdir(parents=True, exist_ok=True)
-                    for name, data in files:  # originals, so the source viewer can show the real page
-                        (saved / "files" / Path(name).name).write_bytes(data)
-                    ocr_pages = st.session_state.stats.get("ocr_pages", 0)
-                    image_pages = st.session_state.stats.get("image_pages", 0)
-                    message = "Files ready."
-                    if ocr_pages:
-                        message += f" {ocr_pages} scanned page{'s' if ocr_pages != 1 else ''} read."
-                    if image_pages:
-                        message += f" Text found in pictures on {image_pages} page{'s' if image_pages != 1 else ''}."
-                    st.session_state.flash = message
-                    st.session_state.ingest_warnings = st.session_state.stats.get("warnings", [])
-                    st.rerun()
-                except ValueError as error:  # friendly message instead of a crash
-                    st.error(str(error), icon=":material/error:")
-        for warning in st.session_state.get("ingest_warnings", []):  # e.g. vision model unavailable
-            st.warning(warning, icon=":material/warning:")
-
-
-def render_documents(pipeline: RAGPipeline, user_id: int) -> None:
-    """Documents tab: what this chat searches. Files are added from the sidebar."""
-    with st.container():
-        stats = st.session_state.stats or {"files": 0, "pages": 0, "chunks": 0}
-        scanned = len({(c["source"], c["page"]) for c in pipeline.chunks if c.get("ocr")}) if pipeline.is_ready else 0
-        with st.container(horizontal=True, gap="small", key="stats"):
-            st.metric("Files", stats["files"], border=True)
-            st.metric("Pages", stats["pages"], border=True)
-            st.metric("Passages", stats["chunks"], border=True)
-            st.metric("Scanned pages", scanned, border=True)
-        if pipeline.is_ready:
-            st.dataframe(
-                file_rows(pipeline.chunks), hide_index=True, width="stretch",
-                column_config={
-                    "File": st.column_config.TextColumn("File", width="medium"),
-                    "Pages": st.column_config.NumberColumn("Pages", width="small"),
-                    "Passages": st.column_config.NumberColumn("Passages", width="small",
-                                                              help="Searchable pieces the file was split into"),
-                    "Read as": st.column_config.ListColumn("Read as", help="Text, Table, Picture or OCR (scanned)"),
-                },
-            )
-        else:
-            with st.container(border=True, key="no_files"):
-                st.markdown("**No files in this chat yet**")
-                st.caption("Add files from the sidebar. DocMind reads PDFs, Word files, text, web pages and images, "
-                           "including scanned pages.")
 
 
 def delete_all_chats(user_id: int) -> int:
@@ -585,11 +575,12 @@ def settings_dialog() -> None:
         prefs["memory"] = st.toggle("Chat memory", value=prefs["memory"], key="pref_memory",
                                     help="Follow-up questions use the earlier ones for context.")
         prefs["top_k"] = st.slider("Passages per answer", 1, 8, prefs["top_k"], key="pref_top_k")
-        st.caption(f"Answers are written by {md_escape(st.session_state.llm.model)} on Groq.")
+        st.caption(f"Answers are written by {md_escape(st.session_state.llm.model)} on Groq. "
+                   "Change the model under the message box.")
 
     with account:
         st.text_input("Username", value=user["username"], disabled=True)
-        st.caption("Usernames can't be changed.")
+        st.caption(f"{PLAN}. Usernames can't be changed.")
         if st.button("Sign out", icon=":material/logout:"):
             logout()
             st.rerun()
@@ -667,6 +658,7 @@ if st.session_state.get("new_recovery_code"):  # must see the code before using 
     render_recovery_code_screen(st.session_state.new_recovery_code)
     st.stop()
 
+
 def secret_groq_key() -> str:
     """GROQ_API_KEY from Streamlit secrets, read on every run so a newly saved secret works without a restart."""
     try:
@@ -697,10 +689,6 @@ if "pipeline" not in st.session_state:  # first run after login -> blank chat
 user = st.session_state.user
 user_id = user["id"]
 pipeline: RAGPipeline = st.session_state.pipeline
-chat = db.get_chat(st.session_state.chat_id, user_id) if st.session_state.chat_id else None
-chat_title = chat["title"] if chat else DEFAULT_TITLE
-
-# ====================== sidebar ======================
 if "prefs" not in st.session_state:
     st.session_state.prefs = dict(DEFAULT_PREFS)
 prefs = st.session_state.prefs
@@ -710,16 +698,24 @@ flash = st.session_state.pop("flash", None)
 if flash:
     st.toast(flash, icon=":material/check_circle:")
 
-
+# ====================== left sidebar: logo, reading options, chats, account ======================
 with st.sidebar:
     st.html('<div class="brand"><span class="mark">D</span><span>DocMind</span></div>')
     if st.button("New chat", icon=":material/edit_square:", width="stretch", key="new_chat"):
         new_chat()
         st.rerun()
 
-    with st.expander("Add files", icon=":material/upload_file:", expanded=not pipeline.is_ready,
-                     key=f"add_files_{st.session_state.chat_id}"):
-        add_files_panel(pipeline, user_id)
+    with st.container(key="reading_options"):
+        st.html('<p class="side-label">When reading files</p>')
+        ocr_ready = ocr.is_available()
+        st.toggle("Read scans and images", value=ocr_ready, disabled=not ocr_ready, key="opt_ocr",
+                  help=f"Reads scanned PDF pages, image files, and the words inside charts and screenshots "
+                       f"in PDF and Word files. Slower; up to {config.MAX_OCR_PAGES} scanned pages and "
+                       f"{config.MAX_IMAGES_PER_FILE} pictures per file.")
+        st.toggle("Describe charts with AI", value=False, key="opt_describe",
+                  help=f"Sends each picture to the Groq vision model ({config.VISION_MODEL}) and indexes its "
+                       f"description, so questions about charts and diagrams can be answered. Up to "
+                       f"{config.MAX_VISION_IMAGES} pictures per file; uses API quota.")
 
     chats = db.list_chats(user_id)
     pinned = [c for c in chats if c["pinned"]]
@@ -738,92 +734,71 @@ with st.sidebar:
     with st.container(horizontal=True, vertical_alignment="center", gap="small", key="account"):
         name = user["username"]
         st.html(f'<div class="who"><span class="avatar">{html.escape(name[:1].upper())}</span>'
-                f'<span class="who-text"><b>{html.escape(name)}</b><small>{html.escape(model_label())}</small></span></div>')
+                f'<span class="who-text"><b>{html.escape(name)}</b><small>{PLAN}</small></span></div>')
         if st.button("", icon=":material/settings:", type="tertiary", key="open_settings", help="Settings"):
             settings_dialog()
 
-# ====================== main area ======================
-typed = st.chat_input("Ask a question about your documents", disabled=not pipeline.is_ready)
-question = st.session_state.pop("pending_question", None) or typed  # clicked suggestion wins over typed text
-if question:
-    st.session_state.main_tab = "Chat"  # answers appear in the Chat tab, so open it
-
-with st.container(horizontal=True, vertical_alignment="center", key="topbar"):
-    st.markdown(f"#### {md_escape(chat_title)}")
-    if pipeline.is_ready:
-        files = st.session_state.stats["files"]
-        st.badge(f"{files} file{'s' if files != 1 else ''} ready", icon=":material/check_circle:", color="green")
-    else:
-        st.badge("No files yet", color="gray")
-    st.space("stretch")
-    if chat:  # rename only makes sense for a saved chat
-        with st.popover("", icon=":material/edit:", type="tertiary", help="Rename chat"):
-            new_title = st.text_input("Chat name", value=chat_title, max_chars=60, key=f"rename_{chat['id']}")
-            if st.button("Save", key=f"rename_save_{chat['id']}", type="primary"):
-                db.rename_chat(chat["id"], user_id, new_title.strip() or chat_title)
-                st.rerun()
-    if st.session_state.messages:
-        st.download_button("Export", data=chat_to_markdown(chat_title, st.session_state.messages),
-                           file_name="docmind_chat.md", mime="text/markdown", icon=":material/download:",
-                           type="tertiary")
-
-render_overview(pipeline, st.session_state.chat_id, mode, top_k, use_memory)
-
-if "want_tab" in st.session_state:  # set by new_chat / open_chat; applied before the tabs are drawn
-    st.session_state.main_tab = st.session_state.pop("want_tab")
-if "main_tab" not in st.session_state:
-    st.session_state.main_tab = "Chat" if pipeline.is_ready else "Documents"
-chat_tab, docs_tab = st.tabs(["Chat", "Documents"], key="main_tab", on_change="rerun")
-
-with docs_tab:
-    if docs_tab.open:
-        render_documents(pipeline, user_id)
-
+# ====================== center: conversation  |  right: documents ======================
 messages = st.session_state.messages
-chat_area = viewer_area = None
-if chat_tab.open:
-    with chat_tab:
-        if not pipeline.is_ready:  # nothing indexed yet -> show the guide
-            getting_started()
-        show_viewer = pipeline.is_ready and any(m["role"] == "assistant" for m in messages)
-        if show_viewer:  # the conversation on the left, the cited page on the right
-            chat_area, viewer_area = st.columns([3, 2], gap="large")
-        else:
-            chat_area = st.container()
+center, right = st.columns([2.6, 1.15], gap="large")
+with right:
+    render_documents_panel(pipeline, st.session_state.chat_id, messages)
 
-        with chat_area:
-            if pipeline.is_ready and len(pipeline.file_names) > 1:  # metadata filter: search only some files
-                st.multiselect("Search in", pipeline.file_names, key=f"scope_{st.session_state.chat_id}",
-                               placeholder="All documents in this chat",
-                               help="Pick files to search only those. Leave empty to search every file in this chat.")
-            previous_user_question = ""
-            for index, message in enumerate(messages):  # redraw history on every rerun
-                is_user = message["role"] == "user"
-                with st.chat_message(message["role"], avatar=USER_AVATAR if is_user else ASSISTANT_AVATAR):
-                    if is_user:
-                        st.markdown(f"**{md_escape(message['content'])}**")
-                        previous_user_question = message["content"]
-                    else:
-                        render_answer(message, index, previous_user_question)
+with center:
+    chat_area = st.container(key="conversation")
+    with chat_area:
+        if not messages and not pipeline.is_ready:
+            welcome()
+        previous_user_question = ""
+        for index, message in enumerate(messages):  # redraw history on every rerun
+            is_user = message["role"] == "user"
+            with st.chat_message(message["role"], avatar=USER_AVATAR if is_user else ASSISTANT_AVATAR):
+                if is_user:
+                    st.markdown(f"**{md_escape(message['content'])}**")
+                    previous_user_question = message["content"]
+                else:
+                    render_answer(message, index, previous_user_question)
+        if pipeline.is_ready and not messages:  # empty chat with files -> offer starters
+            with st.container(key="starters"):
+                st.caption("Try asking")
+                with st.container(horizontal=True, gap="small"):
+                    for suggestion in SUGGESTIONS:
+                        if st.button(suggestion, icon=":material/arrow_outward:", icon_position="right"):
+                            st.session_state.pending_question = suggestion  # picked up on the next run
+                            st.rerun()
+    submitted = render_composer(st.session_state.chat_id, pipeline.is_ready)
 
-            if pipeline.is_ready and not messages and not question:  # empty chat -> offer starters
-                with st.container(key="starters"):
-                    st.caption("Try asking")
-                    with st.container(horizontal=True, gap="small"):
-                        for suggestion in SUGGESTIONS:
-                            if st.button(suggestion, icon=":material/arrow_outward:", icon_position="right"):
-                                st.session_state.pending_question = suggestion  # picked up on the next run
-                                st.rerun()
+# ----- new files: from the + in the message box or the link box -----
+attached = list(submitted.files) if submitted and getattr(submitted, "files", None) else []
+link = st.session_state.pop("pending_link", None)
+if attached or link:
+    with chat_area:
+        with st.spinner("Reading your files..." + (" Scans and images take a little longer."
+                                                   if st.session_state.get("opt_ocr") else "")):
+            try:
+                files = [(f.name, f.getvalue()) for f in attached]
+                if link:
+                    files.append(fetch_url(link))  # public sites only
+                add_files_to_chat(files)
+            except ValueError as error:  # friendly message instead of a crash
+                st.error(str(error), icon=":material/error:")
+                st.stop()
+    typed = (submitted.text or "").strip() if submitted else ""
+    if typed:
+        st.session_state.pending_question = typed  # ask it once the files are in
+    st.rerun()
 
-        if viewer_area is not None:
-            with viewer_area:
-                render_viewer(messages, user_id, st.session_state.chat_id)
+typed = (getattr(submitted, "text", submitted) or "").strip() if submitted else ""
+question = st.session_state.pop("pending_question", None) or typed  # clicked suggestion wins over typed text
+if question and not pipeline.is_ready:
+    st.toast("Attach a file first: use the + in the message box.", icon=":material/attach_file:")
+    question = None
 
-if question and st.session_state.chat_id and chat_area is not None:
+if question and st.session_state.chat_id:
     chat_id = st.session_state.chat_id
     history = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages] if use_memory else []
-    scope = [name for name in st.session_state.get(f"scope_{chat_id}") or [] if name in pipeline.file_names]
-    scope_kwargs = {"sources": scope} if scope else {}  # only passed when the user narrowed the search
+    scope = search_scope(pipeline, chat_id)
+    scope_kwargs = {"sources": scope} if scope else {}  # only passed when files were unticked
     with chat_area:
         with st.chat_message("user", avatar=USER_AVATAR):
             st.markdown(f"**{md_escape(question)}**")
@@ -838,7 +813,8 @@ if question and st.session_state.chat_id and chat_area is not None:
         db.rename_chat(chat_id, user_id, shorten(question, 40))
     db.add_message(chat_id, user_id, "user", question)
     st.session_state.messages.append({"role": "user", "content": question})
-    meta = f"{result['total_ms'] / 1000:.1f} s total · retrieval {result['retrieve_ms']:.0f} ms · {mode}"
+    meta = (f"{result['total_ms'] / 1000:.1f} s total · retrieval {result['retrieve_ms']:.0f} ms · {mode} · "
+            f"{short_model(st.session_state.llm.model)}")
     if scope:
         meta += f" · searched {len(scope)} of {len(pipeline.file_names)} files"
     searched = result["search_query"]
@@ -849,7 +825,5 @@ if question and st.session_state.chat_id and chat_area is not None:
     )
     usage = getattr(st.session_state.llm, "last_usage", None)  # tokens the model saw for this answer
     if usage:
-        st.session_state.setdefault("context_usage", {})[chat_id] = {**usage, "passages": len(result["sources"])}
-    first = cited_numbers(result["answer"], result["sources"])
-    st.session_state.viewer = (len(st.session_state.messages) - 1, first[0]) if first else None  # show the new source
-    st.rerun()  # redraw so the sidebar (recent order, export button) updates immediately
+        st.session_state.setdefault("context_usage", {})[chat_id] = usage
+    st.rerun()  # redraw so the sidebar (recent order) and the documents panel update

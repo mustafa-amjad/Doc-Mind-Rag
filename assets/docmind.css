@@ -53,26 +53,33 @@
 .who-text b { font-weight: 600; font-size: 14px; color: #1a1a19; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .who-text small { font-size: 12px; color: #7a776e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* ---------- overview boxes: files, context window, model ---------- */
-.st-key-overview { margin-top: 2px; align-items: stretch !important; }
-.st-key-overview > div { flex: 1 1 200px; min-width: 0; }
-.st-key-box_files, .st-key-box_context, .st-key-box_model { height: 100%; background: #fff; border-color: var(--dm-line) !important; border-radius: 12px; gap: 4px; animation: dm-rise 0.3s var(--dm-ease) both; }
 [class*="st-key-menu_"] [data-testid="stPopoverButton"] div[aria-hidden="true"] { display: none; }
-.st-key-overview [data-testid="stCaptionContainer"] p { margin: 0; }
-.st-key-file_chips { flex-wrap: wrap; }
+.st-key-reading_options { gap: 6px; padding-bottom: 6px; }
 
-/* ---------- header bar ---------- */
-.st-key-topbar { border-bottom: 1px solid var(--dm-line); padding-bottom: 12px; gap: 12px; flex-wrap: nowrap !important; }
-.st-key-topbar > div { flex-shrink: 0; }
-.st-key-topbar > div:first-child { flex: 0 1 auto; min-width: 0; }
-.st-key-topbar > div:first-child * { min-width: 0; max-width: 100%; }
-.st-key-topbar h4 { margin: 0; padding: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* ---------- right panel: the chat's documents as a grid ---------- */
+.st-key-docs_panel { position: sticky; top: 3.5rem; background: var(--dm-side); border: 1px solid var(--dm-line); border-radius: 14px; padding: 16px; gap: 10px; animation: dm-fade 0.3s var(--dm-ease) both; }
+.panel-title { margin: 0; font-weight: 600; font-size: 15px; color: #1a1a19; }
+.st-key-doc_grid { flex-wrap: wrap; }
+.st-key-doc_grid > div { flex: 1 1 150px; min-width: 150px; }
+[class*="st-key-dcard_"] { height: 100%; background: #fff; border-color: var(--dm-line) !important; border-radius: 12px; gap: 6px; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+[class*="st-key-dcard_"]:hover { box-shadow: 0 1px 2px rgba(20, 20, 18, 0.05), 0 6px 18px rgba(20, 20, 18, 0.06); }
+[class*="st-key-dcard_"][class*="_cited"] { border-color: var(--dm-accent) !important; box-shadow: 0 0 0 1px var(--dm-accent); }
+[class*="st-key-dcard_"] p { overflow-wrap: anywhere; }
+
+/* ---------- center: welcome, message box pinned to the bottom ---------- */
+.hello h2 { margin: 1.5rem 0 0.25rem; font-size: 26px; font-weight: 600; letter-spacing: -0.01em; color: #1a1a19; }
+.hello p { margin: 0 0 1rem; color: #5f5e5a; }
+.st-key-composer { position: sticky; bottom: 0; z-index: 5; background: #fafaf7; padding: 10px 0 12px; gap: 6px; }
+.st-key-composer_meta { padding: 0 6px; flex-wrap: nowrap !important; }
+.st-key-composer_meta [data-baseweb="select"] > div { background: transparent; border-color: transparent; font-size: 13px; }
+.st-key-composer_meta [data-baseweb="select"] > div:hover { border-color: var(--dm-line-2); }
+.st-key-token_bar [data-testid="stProgress"] > div { margin: 0; }
 
 /* ---------- narrower screens: side-by-side panels stack ---------- */
 @media (max-width: 1180px) {
   [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]) { flex-wrap: wrap; row-gap: 16px; }
   [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] { flex: 1 1 100% !important; width: 100% !important; min-width: 100% !important; }
-  .st-key-viewer { position: static; }
+  .st-key-docs_panel { position: static; }
 }
 
 /* ---------- tabs ---------- */
@@ -94,17 +101,8 @@
 .st-key-starters { animation: dm-rise 0.36s var(--dm-ease) both; }
 .st-key-starters [data-testid^="stBaseButton"] { border-radius: 99px; }
 
-/* ---------- source viewer ---------- */
-.st-key-viewer { position: sticky; top: 4rem; animation: dm-fade 0.3s var(--dm-ease) both; }
-.st-key-viewer_head { border-bottom: 1px solid var(--dm-line); padding-bottom: 10px; margin-bottom: 6px; gap: 2px; }
-.st-key-viewer img { border: 1px solid var(--dm-line); border-radius: 6px; box-shadow: 0 1px 3px rgba(20, 20, 18, 0.06); }
-
-/* ---------- documents tab ---------- */
-.st-key-stats { flex-wrap: wrap; }
-.st-key-stats > div { flex: 1 1 120px; }
-[data-testid="stMetric"] { transition: border-color 0.15s ease, box-shadow 0.15s ease; }
-[data-testid="stMetric"]:hover { border-color: var(--dm-line-2); box-shadow: 0 1px 2px rgba(20, 20, 18, 0.05), 0 6px 18px rgba(20, 20, 18, 0.05); }
-.st-key-upload, .st-key-no_files, [data-testid="stDataFrame"] { animation: dm-rise 0.32s var(--dm-ease) both; }
+/* ---------- source pop-up ---------- */
+div[role="dialog"] [data-testid="stImage"] img { border: 1px solid var(--dm-line); border-radius: 6px; box-shadow: 0 1px 3px rgba(20, 20, 18, 0.06); }
 
 /* ---------- controls ---------- */
 [data-testid^="stBaseButton"] { transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease; }
@@ -118,8 +116,11 @@ div[role="dialog"] { animation: dm-pop 0.2s var(--dm-ease) both; }
 @media (max-width: 640px) {
   .st-key-steps > div + div { border-left: 0; border-top: 1px solid var(--dm-line); }
 
-  .st-key-viewer { position: static; }
+  .st-key-docs_panel { position: static; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* the message box sits at the bottom of the window, like ChatGPT, even in a short chat */
+.st-key-conversation { min-height: calc(100vh - 17rem); }

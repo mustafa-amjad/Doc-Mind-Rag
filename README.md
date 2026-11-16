@@ -74,7 +74,7 @@ flowchart LR
 
 **Retrieval**
 - Retrieve wide, then re-rank: BM25 and vector search each return their top 20, Reciprocal Rank Fusion merges them, and a cross-encoder re-ranks the 20 candidates and keeps the best 4 for the AI (adjustable 1–8)
-- **Search in:** pick which files of a chat a question searches. The filter is applied inside both searches (a FAISS ID selector and masked BM25 scores), so the top 20 always come from the chosen files
+- **Choose the files to search:** untick a document card ("Use in answers") to leave it out. The filter is applied inside both searches (a FAISS ID selector and masked BM25 scores), so the top 20 always come from the chosen files
 - Flat or HNSW index chosen automatically by corpus size
 
 **Chats and accounts**
@@ -88,9 +88,11 @@ flowchart LR
 - Chat memory understands follow-up questions and shows "Searched for: ..."
 - Users can only see their own chats (every query is scoped by user id)
 
-**Interface**
-- Clean light/dark theme defined in `.streamlit/config.toml` (no custom CSS), Material icons, one-click starter questions
-- Source chips (file · page), collapsed evidence, speed badge on every answer
+**Interface** (Streamlit app)
+- Three panes: chats on the left (reading options, Pinned / Recents with a "..." menu to pin, rename, export or delete, and the account row), the conversation in the middle, the chat's documents as a grid of cards on the right
+- Attach files with the **+** in the message box (or add a link on the right). Under the box: a **model picker** (the answer models Groq offers, listed live) and the **tokens** the last answer used out of the model's context window
+- Click a source under an answer to open the page in a pop-up with the cited sentence highlighted
+- Ivory, emerald and orange theme (`.streamlit/config.toml` + `assets/docmind.css`), Material icons, one-click starter questions
 - Export any chat to Markdown
 
 ## Tech Stack
@@ -193,10 +195,10 @@ Accounts, chats and indexes are stored in the `docmind-data` volume, so they sur
 ## How to Use
 
 1. Create an account and log in.
-2. Open **Documents** in the sidebar, upload files (or paste a link), click **Build index**.
-3. Ask questions. Follow-ups like "what about for gift cards?" work.
-4. Pin important chats, start a **New chat** for other documents, switch any time from the sidebar.
-5. Open **View evidence** under an answer to see the exact pages used.
+2. Attach files with the **+** in the message box (or paste a link in the Documents panel on the right) and ask a question in the same message.
+3. Ask follow-ups. Questions like "what about for gift cards?" work.
+4. Click a source under an answer to see the page with the cited sentence highlighted; open **Passages used** for every passage.
+5. Pin important chats, start a **New chat** for other documents, switch any time from the sidebar.
 
 ## How It Works (Short Version)
 
@@ -219,6 +221,8 @@ python scripts/eval_answers.py      # needs GROQ_API_KEY in .env; prints PASS/FA
 ```
 
 The latest result is saved in `eval/last_run.json` (date, model, settings, every answer and what it cited).
+
+Results for the models in the picker: gpt-oss-120b 24/24 (the default, run 2026-11-16), qwen3.8-27b 24/24 and gpt-oss-20b 23/24 (run 2026-11-17) (on "a jacket I bought with a coupon" it said the coupon doesn't change the return period instead of saying the documents don't mention coupons).
 
 **Retrieval only.** Measure what hybrid search and re-ranking actually add on **your** documents (no Groq key needed):
 
