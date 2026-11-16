@@ -77,8 +77,8 @@
 
 /* ---------- narrower screens: side-by-side panels stack ---------- */
 @media (max-width: 1180px) {
-  [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]) { flex-wrap: wrap; row-gap: 16px; }
-  [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] { flex: 1 1 100% !important; width: 100% !important; min-width: 100% !important; }
+  .st-key-workspace > [data-testid="stHorizontalBlock"] { flex-wrap: wrap; row-gap: 16px; }
+  .st-key-workspace > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] { flex: 1 1 100% !important; width: 100% !important; min-width: 100% !important; }
   .st-key-docs_panel { position: static; }
 }
 

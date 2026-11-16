@@ -740,7 +740,7 @@ with st.sidebar:
 
 # ====================== center: conversation  |  right: documents ======================
 messages = st.session_state.messages
-center, right = st.columns([2.6, 1.15], gap="large")
+center, right = st.container(key="workspace").columns([2.6, 1.15], gap="large")  # stacks on narrow screens (CSS)
 with right:
     render_documents_panel(pipeline, st.session_state.chat_id, messages)
 
