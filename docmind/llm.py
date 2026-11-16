@@ -162,6 +162,8 @@ class LLM:
         return clean_model_text(response.choices[0].message.content)
 
     def answer(self, question: str, chunks: list[dict], history: list[dict] | None = None) -> str:
+        """The answer text. Token use of this call is left in self.last_usage (shown as the context window)."""
+        self.last_usage = None
         if not chunks:  # nothing retrieved -> do not waste an API call
             return NOT_FOUND
         memory = [  # chat memory for the ANSWER: recent turns, content only
@@ -175,4 +177,8 @@ class LLM:
             ],
             temperature=0,  # 0 = no creativity, stick to the facts
         )
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            self.last_usage = {"prompt_tokens": int(usage.prompt_tokens or 0),
+                               "completion_tokens": int(usage.completion_tokens or 0)}
         return tidy_not_found(normalize_citations(clean_model_text(response.choices[0].message.content)))

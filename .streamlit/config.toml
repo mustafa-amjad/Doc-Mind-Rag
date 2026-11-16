@@ -1,5 +1,5 @@
-# Same design system as the web app (web/src/styles.css): one sans typeface (Geist) for
-# everything, white page, a sidebar one shade darker (no dark/light split), emerald accent.
+# Ivory, emerald and orange: one sans typeface (Geist), an ivory page with white cards, a warmer
+# ivory sidebar, emerald for accents (toggles, tabs, badges) and orange for buttons (assets/docmind.css).
 [theme]
 base = "light"
 font = "Geist:https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap"
@@ -15,11 +15,11 @@ headingFontSizes = ["28px", "22px", "18px", "16px", "15px", "13px"]
 headingFontWeights = [600, 600, 600, 600, 500, 500]
 
 primaryColor = "#0B5D45"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F4F4F2"
-codeBackgroundColor = "#F4F4F2"
+backgroundColor = "#FAFAF7"
+secondaryBackgroundColor = "#F1EFE8"
+codeBackgroundColor = "#F1EFE8"
 textColor = "#1A1A19"
-borderColor = "#E5E4E0"
+borderColor = "#E6E3DA"
 linkColor = "#0B5D45"
 grayColor = "#5F5E5A"
 greenColor = "#0B5D45"
@@ -28,16 +28,16 @@ greenTextColor = "#0B5D45"
 blueColor = "#1E3A8A"
 violetColor = "#5B21B6"
 redColor = "#B42318"
-orangeColor = "#9A3412"
+orangeColor = "#C2410C"
 # cited sentences in the source viewer use :orange-background[...], so this is the highlight yellow
 orangeBackgroundColor = "#F7E7A1"
 
 [theme.sidebar]
-backgroundColor = "#F7F7F5"
-secondaryBackgroundColor = "#EDEDEA"
-codeBackgroundColor = "#EDEDEA"
+backgroundColor = "#F3F1EA"
+secondaryBackgroundColor = "#E9E6DC"
+codeBackgroundColor = "#E9E6DC"
 textColor = "#1A1A19"
-borderColor = "#E5E4E0"
+borderColor = "#E2DED2"
 grayColor = "#5F5E5A"
 primaryColor = "#0B5D45"
 

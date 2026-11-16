@@ -1,31 +1,65 @@
 /* DocMind: page structure and motion on top of the theme in .streamlit/config.toml.
    Selectors target keyed containers (.st-key-<key>) so they don't depend on Streamlit internals. */
 :root {
-  --dm-line: #e5e4e0;
-  --dm-line-2: #d9d8d3;
-  --dm-side: #f7f7f5;
-  --dm-hover: #efefec;
-  --dm-active: #e8e8e4;
+  --dm-line: #e6e3da;
+  --dm-line-2: #d8d4c7;
+  --dm-side: #f3f1ea;
+  --dm-hover: #ebe8de;
+  --dm-active: #e4e0d3;
   --dm-accent: #0b5d45;
   --dm-accent-soft: #e5f2ec;
+  --dm-orange: #c2410c;
+  --dm-orange-dark: #9a3412;
+  --dm-orange-soft: #fdeee4;
   --dm-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 /* ---------- page frame ---------- */
 [data-testid="stMainBlockContainer"] { padding-top: 4rem; }
 
+/* ---------- buttons: orange ---------- */
+[data-testid="stBaseButton-primary"], [data-testid="stBaseButton-primaryFormSubmit"] {
+  background: var(--dm-orange); border-color: var(--dm-orange); color: #fff; }
+[data-testid="stBaseButton-primary"]:hover:not(:disabled), [data-testid="stBaseButton-primaryFormSubmit"]:hover:not(:disabled) {
+  background: var(--dm-orange-dark); border-color: var(--dm-orange-dark); color: #fff; }
+[data-testid="stBaseButton-secondary"], [data-testid="stBaseButton-secondaryFormSubmit"] { background: #fff; }
+[data-testid="stBaseButton-secondary"]:hover:not(:disabled), [data-testid="stBaseButton-secondaryFormSubmit"]:hover:not(:disabled) {
+  border-color: var(--dm-orange); color: var(--dm-orange); }
+[data-testid="stChatInputSubmitButton"]:not(:disabled) { background: var(--dm-orange); color: #fff; }
+
 /* ---------- sidebar ---------- */
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 17px; letter-spacing: -0.01em; color: #1a1a19; }
 .brand .mark { width: 26px; height: 26px; border-radius: 7px; background: var(--dm-accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
-.st-key-chat_list { border-top: 1px solid var(--dm-line); padding-top: 12px; margin-top: 4px; gap: 2px; }
-[class*="st-key-row_"] { overflow-x: hidden !important; border-radius: 8px; transition: background-color 0.15s ease; padding: 0 2px; }
+[data-testid="stSidebar"] [data-testid="stExpander"] details { background: #fff; border-color: var(--dm-line); border-radius: 12px; }
+[data-testid="stSidebar"] [data-testid="stExpander"] summary p { font-weight: 600; }
+.side-label { margin: 10px 0 2px 8px; font-size: 12px; font-weight: 500; color: #7a776e; }
+.st-key-chat_list { border-top: 1px solid var(--dm-line); padding-top: 4px; margin-top: 4px; gap: 1px; }
+[class*="st-key-row_"] { overflow-x: hidden !important; border-radius: 8px; transition: background-color 0.15s ease; padding: 0 2px; min-height: 36px; }
 [class*="st-key-row_"]:hover { background: var(--dm-hover); }
-[class*="st-key-row_"][class*="_on"] { background: var(--dm-active); box-shadow: inset 3px 0 0 var(--dm-accent); }
-[class*="st-key-row_"] [data-testid^="stBaseButton"] { justify-content: flex-start; background: transparent; border-color: transparent; }
+[class*="st-key-row_"][class*="_on"] { background: var(--dm-active); }
+[class*="st-key-row_"] [data-testid^="stBaseButton"] { justify-content: flex-start; background: transparent; border-color: transparent; color: #1a1a19; min-height: 34px; }
+[class*="st-key-row_"] [data-testid^="stBaseButton"]:hover:not(:disabled) { color: #1a1a19; border-color: transparent; }
 [class*="st-key-row_"] [data-testid^="stBaseButton"] > div { justify-content: flex-start; }
-[class*="st-key-row_"] [data-testid^="stBaseButton"] p { text-align: left; }
-[class*="st-key-menu_"] { overflow: visible !important; flex-shrink: 0; }
-.st-key-account { position: sticky; bottom: 0; z-index: 2; background: var(--dm-side); border-top: 1px solid var(--dm-line); padding: 12px 0 8px; margin-top: 12px; }
+[class*="st-key-row_"] [data-testid^="stBaseButton"] p { text-align: left; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the "..." menu only shows on the hovered or open chat, like ChatGPT and Claude */
+[class*="st-key-menu_"] { overflow: visible !important; flex-shrink: 0; opacity: 0; transition: opacity 0.15s ease; }
+[class*="st-key-row_"]:hover [class*="st-key-menu_"], [class*="st-key-row_"][class*="_on"] [class*="st-key-menu_"],
+[class*="st-key-menu_"]:focus-within { opacity: 1; }
+.st-key-account { position: sticky; bottom: 0; z-index: 2; background: var(--dm-side); border-top: 1px solid var(--dm-line); padding: 12px 0 8px; margin-top: 12px; flex-wrap: nowrap !important; }
+.st-key-account > div:first-child { flex: 1 1 auto; min-width: 0; }
+.who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.who .avatar { width: 32px; height: 32px; flex-shrink: 0; border-radius: 99px; background: var(--dm-accent); color: #faf9f5; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; }
+.who-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.who-text b { font-weight: 600; font-size: 14px; color: #1a1a19; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who-text small { font-size: 12px; color: #7a776e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- overview boxes: files, context window, model ---------- */
+.st-key-overview { margin-top: 2px; align-items: stretch !important; }
+.st-key-overview > div { flex: 1 1 200px; min-width: 0; }
+.st-key-box_files, .st-key-box_context, .st-key-box_model { height: 100%; background: #fff; border-color: var(--dm-line) !important; border-radius: 12px; gap: 4px; animation: dm-rise 0.3s var(--dm-ease) both; }
+[class*="st-key-menu_"] [data-testid="stPopoverButton"] div[aria-hidden="true"] { display: none; }
+.st-key-overview [data-testid="stCaptionContainer"] p { margin: 0; }
+.st-key-file_chips { flex-wrap: wrap; }
 
 /* ---------- header bar ---------- */
 .st-key-topbar { border-bottom: 1px solid var(--dm-line); padding-bottom: 12px; gap: 12px; flex-wrap: nowrap !important; }

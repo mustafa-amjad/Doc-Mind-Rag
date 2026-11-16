@@ -1,5 +1,6 @@
 """DocMind: Streamlit UI with login, saved chats, pinned chats and chat memory.
 Run with:  streamlit run app.py"""
+import html  # escapes the username in the account row
 import re  # used to clean whitespace in snippets
 import shutil  # deletes a chat's saved index folder
 from pathlib import Path  # builds file paths that work on Windows and Mac
@@ -208,6 +209,69 @@ def render_answer_extras(sources: list[dict], meta: str, searched: str = "", que
                 st.caption(md_escape(shorten(src["text"], 1200)))
 
 
+def model_label() -> str:
+    """'gpt-oss-120b' for 'openai/gpt-oss-120b'."""
+    llm = st.session_state.get("llm")
+    return (llm.model if llm else config.LLM_MODEL).split("/")[-1]
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def context_window(model: str, _client) -> int | None:
+    """The model's context window in tokens, as Groq reports it (None if Groq doesn't say)."""
+    try:
+        return int(getattr(_client.models.retrieve(model), "context_window", 0) or 0) or None
+    except Exception:
+        return None
+
+
+def file_icon(name: str) -> str:
+    suffix = Path(name).suffix.lower()
+    if suffix == ".pdf":
+        return ":material/picture_as_pdf:"
+    if suffix in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff"}:
+        return ":material/image:"
+    if suffix in {".html", ".htm"}:
+        return ":material/language:"
+    return ":material/description:"
+
+
+BOX_FILES = ":small[:gray[:material/folder_open: In this chat]]"
+NEW_LINE = "  \n"  # markdown line break: label on top, value under it, in one block
+
+
+def render_overview(pipeline: RAGPipeline, chat_id: int | None, mode: str, top_k: int, memory: bool) -> None:
+    """Three boxes under the header: what this chat contains, how full the context window is, which model answers."""
+    llm = st.session_state.llm
+    with st.container(horizontal=True, gap="small", key="overview"):
+        with st.container(border=True, key="box_files"):
+            if pipeline.is_ready:
+                stats = st.session_state.stats or pipeline.stats()
+                files = stats["files"]
+                st.markdown(BOX_FILES + NEW_LINE + f"**{files} file{'s' if files != 1 else ''}** · "
+                            f"{stats['pages']} pages · {stats['chunks']} passages")
+                with st.container(horizontal=True, gap="xxsmall", key="file_chips"):
+                    for name in pipeline.file_names[:4]:
+                        st.badge(shorten(name, 26), icon=file_icon(name), color="gray")
+                    if len(pipeline.file_names) > 4:
+                        st.badge(f"+{len(pipeline.file_names) - 4} more", color="gray")
+            else:
+                st.markdown(BOX_FILES + NEW_LINE + "**No files yet**")
+                st.caption("Add files from the sidebar.")
+        with st.container(border=True, key="box_context"):
+            window = context_window(llm.model, llm.client)
+            used = (st.session_state.get("context_usage") or {}).get(chat_id)
+            tokens = used["prompt_tokens"] if used else 0
+            st.markdown(":small[:gray[:material/memory: Context window]]" + NEW_LINE
+                        + f"**{tokens:,}**" + (f" of {window:,} tokens" if window else " tokens"))
+            if window:
+                st.progress(min(tokens / window, 1.0))
+            st.caption(f"Last question: rules, {used['passages']} passages and recent chat" if used
+                       else "Fills as you ask: the rules, the passages found and recent chat")
+        with st.container(border=True, key="box_model"):
+            st.markdown(":small[:gray[:material/neurology: Model]]" + NEW_LINE + f"**{md_escape(model_label())}** · Groq")
+            st.caption(f"{mode} · {top_k} passages per answer · memory {'on' if memory else 'off'}")
+
+
 def chat_to_markdown(title: str, messages: list[dict]) -> str:
     """Turn the chat into a .md file the user can download."""
     lines = [f"# {title}", ""]
@@ -232,7 +296,7 @@ def page_header(title: str = "Sign in to DocMind", note: str = "") -> None:
 
 def getting_started() -> None:
     """Empty state: three numbered steps in one panel, divided by lines."""
-    steps = [("1", "Add files", "Open the Documents tab and upload PDFs, Word files, images or a link."),
+    steps = [("1", "Add files", "Use Add files in the sidebar: PDFs, Word files, images or a link."),
              ("2", "Ask a question", "Type in the box below. Follow-up questions keep their context."),
              ("3", "Check the source", "Each answer opens the page it came from, with the sentence highlighted.")]
     with st.container(horizontal=True, gap=None, key="steps"):
@@ -387,7 +451,7 @@ def chat_row(chat: dict, active: bool, user_id: int) -> None:
                      type="secondary" if active else "tertiary"):
             open_chat(chat_id)
             st.rerun()
-        with st.popover("", icon=":material/more_vert:", type="tertiary", key=f"menu_{chat_id}"):
+        with st.popover("", icon=":material/more_horiz:", type="tertiary", key=f"menu_{chat_id}"):
             if st.button("Unpin" if chat["pinned"] else "Pin to top", key=f"pin_{chat_id}", type="tertiary",
                          icon=":material/keep_off:" if chat["pinned"] else ":material/keep:"):
                 db.set_pinned(chat_id, user_id, not chat["pinned"])
@@ -409,9 +473,8 @@ def file_rows(chunks: list[dict]) -> list[dict]:
 
 
 def add_files_panel(pipeline: RAGPipeline, user_id: int) -> None:
-    """Upload, link and reading options, then index into this chat."""
-    with st.container(border=True, key="upload"):
-        st.markdown("**Add files**")
+    """Upload, link and reading options, then index into this chat (shown in the sidebar)."""
+    with st.container(key="upload"):
         uploads = st.file_uploader("Files", type=SUPPORTED_TYPES, accept_multiple_files=True,
                                    label_visibility="collapsed", key=f"upload_{st.session_state.chat_id}",
                                    help="PDF, DOCX, TXT, MD, HTML or an image (PNG, JPG, WEBP, BMP, GIF, TIFF)")
@@ -466,9 +529,8 @@ def add_files_panel(pipeline: RAGPipeline, user_id: int) -> None:
 
 
 def render_documents(pipeline: RAGPipeline, user_id: int) -> None:
-    """Documents tab: what this chat searches, and where to add more."""
-    files_col, upload_col = st.columns([3, 2], gap="large")
-    with files_col:
+    """Documents tab: what this chat searches. Files are added from the sidebar."""
+    with st.container():
         stats = st.session_state.stats or {"files": 0, "pages": 0, "chunks": 0}
         scanned = len({(c["source"], c["page"]) for c in pipeline.chunks if c.get("ocr")}) if pipeline.is_ready else 0
         with st.container(horizontal=True, gap="small", key="stats"):
@@ -490,10 +552,8 @@ def render_documents(pipeline: RAGPipeline, user_id: int) -> None:
         else:
             with st.container(border=True, key="no_files"):
                 st.markdown("**No files in this chat yet**")
-                st.caption("Add files on the right. DocMind reads PDFs, Word files, text, web pages and images, "
+                st.caption("Add files from the sidebar. DocMind reads PDFs, Word files, text, web pages and images, "
                            "including scanned pages.")
-    with upload_col:
-        add_files_panel(pipeline, user_id)
 
 
 def delete_all_chats(user_id: int) -> int:
@@ -656,24 +716,29 @@ with st.sidebar:
         new_chat()
         st.rerun()
 
+    with st.expander("Add files", icon=":material/upload_file:", expanded=not pipeline.is_ready,
+                     key=f"add_files_{st.session_state.chat_id}"):
+        add_files_panel(pipeline, user_id)
+
     chats = db.list_chats(user_id)
     pinned = [c for c in chats if c["pinned"]]
     recent = [c for c in chats if not c["pinned"]]
     with st.container(key="chat_list"):
         if pinned:
-            st.caption("Pinned")
+            st.html('<p class="side-label">Pinned</p>')
             for item in pinned:
                 chat_row(item, item["id"] == st.session_state.chat_id, user_id)
-        st.caption("Chats")
+        st.html('<p class="side-label">Recents</p>')
         if not recent and not pinned:
             st.caption("Your chats will appear here.")
         for item in recent:
             chat_row(item, item["id"] == st.session_state.chat_id, user_id)
 
     with st.container(horizontal=True, vertical_alignment="center", gap="small", key="account"):
-        st.markdown(f":material/account_circle: **{md_escape(user['username'])}**")
-        st.space("stretch")
-        if st.button("Settings", icon=":material/settings:", type="tertiary", key="open_settings"):
+        name = user["username"]
+        st.html(f'<div class="who"><span class="avatar">{html.escape(name[:1].upper())}</span>'
+                f'<span class="who-text"><b>{html.escape(name)}</b><small>{html.escape(model_label())}</small></span></div>')
+        if st.button("", icon=":material/settings:", type="tertiary", key="open_settings", help="Settings"):
             settings_dialog()
 
 # ====================== main area ======================
@@ -700,6 +765,8 @@ with st.container(horizontal=True, vertical_alignment="center", key="topbar"):
         st.download_button("Export", data=chat_to_markdown(chat_title, st.session_state.messages),
                            file_name="docmind_chat.md", mime="text/markdown", icon=":material/download:",
                            type="tertiary")
+
+render_overview(pipeline, st.session_state.chat_id, mode, top_k, use_memory)
 
 if "want_tab" in st.session_state:  # set by new_chat / open_chat; applied before the tabs are drawn
     st.session_state.main_tab = st.session_state.pop("want_tab")
@@ -779,6 +846,9 @@ if question and st.session_state.chat_id and chat_area is not None:
         {"role": "assistant", "content": result["answer"], "sources": result["sources"],
          "meta": meta, "searched": searched}
     )
+    usage = getattr(st.session_state.llm, "last_usage", None)  # tokens the model saw for this answer
+    if usage:
+        st.session_state.setdefault("context_usage", {})[chat_id] = {**usage, "passages": len(result["sources"])}
     first = cited_numbers(result["answer"], result["sources"])
     st.session_state.viewer = (len(st.session_state.messages) - 1, first[0]) if first else None  # show the new source
     st.rerun()  # redraw so the sidebar (recent order, export button) updates immediately
