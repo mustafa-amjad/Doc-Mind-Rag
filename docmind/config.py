@@ -20,8 +20,8 @@ MIN_CHUNK_CHARS = 30  # throw away tiny junk chunks (page numbers, etc.)
 SECTION_CHARS = 3000  # DOCX/TXT/HTML are grouped into sections this big (section number = 'page')
 
 # ---- retrieval ----
-RETRIEVE_K = 10  # how many candidates each search (vector, keyword) brings back
-FINAL_K = 4  # how many chunks we finally give to the LLM
+RETRIEVE_K = 20  # retrieve wide: each search (vector, keyword) brings back 20, and the top 20 merged go to the re-ranker
+FINAL_K = 4  # the re-ranker keeps the best 4 for the LLM
 RRF_K = 60  # RRF smoothing constant (60 is the standard value from the paper)
 
 # ---- FAISS index choice ----

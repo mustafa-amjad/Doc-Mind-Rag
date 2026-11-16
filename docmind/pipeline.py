@@ -130,15 +130,26 @@ class RAGPipeline:
         return self.stats()
 
     # ---------------- search + answer ----------------
+    def allowed_ids(self, sources: list[str] | None) -> list[int] | None:
+        """Chunk ids that belong to the chosen files (None = search every file in this chat)."""
+        if not sources:
+            return None
+        chosen = set(sources)
+        return [i for i, chunk in enumerate(self.chunks) if chunk["source"] in chosen]
+
     def retrieve(self, question: str, use_hybrid: bool = True, use_rerank: bool = True,
-                 final_k: int | None = None) -> list[dict]:
-        """Find the best chunks. The flags let you A/B test each technique."""
+                 final_k: int | None = None, sources: list[str] | None = None) -> list[dict]:
+        """Find the best chunks. The flags let you A/B test each technique.
+        sources: only search these files (metadata filter applied inside both searches)."""
         final_k = final_k or config.FINAL_K  # how many chunks to keep
+        allowed = self.allowed_ids(sources)
+        if allowed is not None and not allowed:  # the chosen files are not in this chat
+            return []
         query_vector = self.embedder.encode([question])[0]  # embed the question
-        vector_ids = [i for i, _ in self.store.search(query_vector, config.RETRIEVE_K)]  # meaning search
+        vector_ids = [i for i, _ in self.store.search(query_vector, config.RETRIEVE_K, allowed)]  # meaning search
 
         if use_hybrid:  # add keyword search and merge
-            keyword_ids = [i for i, _ in self.keyword.search(question, config.RETRIEVE_K)]
+            keyword_ids = [i for i, _ in self.keyword.search(question, config.RETRIEVE_K, allowed)]
             fused = rrf_fusion([vector_ids, keyword_ids], config.RRF_K)  # merge by rank
             candidate_ids = [i for i, _ in fused[: config.RETRIEVE_K]]
         else:  # vector only
@@ -150,12 +161,13 @@ class RAGPipeline:
         return candidates[:final_k]
 
     def ask(self, question: str, use_hybrid: bool = True, use_rerank: bool = True,
-            final_k: int | None = None, history: list[dict] | None = None) -> dict:
-        """Full RAG with chat memory: rewrite follow-up, retrieve, generate."""
+            final_k: int | None = None, history: list[dict] | None = None,
+            sources: list[str] | None = None) -> dict:
+        """Full RAG with chat memory: rewrite follow-up, retrieve, generate. sources: only search these files."""
         history = history or []
         start = time.perf_counter()
         search_query = self.llm.rewrite_question(question, history)  # follow-up -> standalone question
-        chunks = self.retrieve(search_query, use_hybrid, use_rerank, final_k)  # step 1: retrieve
+        chunks = self.retrieve(search_query, use_hybrid, use_rerank, final_k, sources)  # step 1: retrieve
         retrieve_ms = (time.perf_counter() - start) * 1000
         answer = self.llm.answer(question, chunks, history)  # step 2: generate (sees recent chat too)
         total_ms = (time.perf_counter() - start) * 1000

@@ -14,11 +14,16 @@ class KeywordIndex:
     def __init__(self, texts: list[str]):
         self.bm25 = BM25Okapi([tokenize(t) for t in texts])  # build word statistics for every chunk
 
-    def search(self, query: str, k: int) -> list[tuple[int, float]]:
-        """Return [(chunk_id, score), ...] best first. Chunks with score 0 are dropped."""
+    def search(self, query: str, k: int, allowed_ids: list[int] | None = None) -> list[tuple[int, float]]:
+        """Return [(chunk_id, score), ...] best first. Chunks with score 0 are dropped.
+        allowed_ids limits the search to those chunks."""
         tokens = tokenize(query)
         if not tokens:  # query had no words (only symbols)
             return []
         scores = self.bm25.get_scores(tokens)  # one score per chunk
+        if allowed_ids is not None:  # every other chunk scores 0, so it can never be returned
+            mask = np.zeros(len(scores), dtype=bool)
+            mask[list(allowed_ids)] = True
+            scores = np.where(mask, scores, 0.0)
         top = np.argsort(scores)[::-1][:k]  # sort high -> low, keep first k
         return [(int(i), float(scores[i])) for i in top if scores[i] > 0]  # score 0 = no word matched

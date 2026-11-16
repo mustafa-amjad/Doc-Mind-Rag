@@ -724,6 +724,10 @@ if chat_tab.open:
             chat_area = st.container()
 
         with chat_area:
+            if pipeline.is_ready and len(pipeline.file_names) > 1:  # metadata filter: search only some files
+                st.multiselect("Search in", pipeline.file_names, key=f"scope_{st.session_state.chat_id}",
+                               placeholder="All documents in this chat",
+                               help="Pick files to search only those. Leave empty to search every file in this chat.")
             previous_user_question = ""
             for index, message in enumerate(messages):  # redraw history on every rerun
                 is_user = message["role"] == "user"
@@ -750,13 +754,15 @@ if chat_tab.open:
 if question and st.session_state.chat_id and chat_area is not None:
     chat_id = st.session_state.chat_id
     history = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages] if use_memory else []
+    scope = [name for name in st.session_state.get(f"scope_{chat_id}") or [] if name in pipeline.file_names]
+    scope_kwargs = {"sources": scope} if scope else {}  # only passed when the user narrowed the search
     with chat_area:
         with st.chat_message("user", avatar=USER_AVATAR):
             st.markdown(f"**{md_escape(question)}**")
         with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
             with st.spinner("Searching your files..."):
                 try:
-                    result = pipeline.ask(question, use_hybrid, use_rerank, top_k, history)
+                    result = pipeline.ask(question, use_hybrid, use_rerank, top_k, history, **scope_kwargs)
                 except Exception as error:  # API key, rate limit, network... show it, keep the chat usable
                     st.error(friendly_error(error), icon=":material/error:")
                     st.stop()  # nothing is saved, so the user can simply ask again
@@ -765,6 +771,8 @@ if question and st.session_state.chat_id and chat_area is not None:
     db.add_message(chat_id, user_id, "user", question)
     st.session_state.messages.append({"role": "user", "content": question})
     meta = f"{result['total_ms'] / 1000:.1f} s total · retrieval {result['retrieve_ms']:.0f} ms · {mode}"
+    if scope:
+        meta += f" · searched {len(scope)} of {len(pipeline.file_names)} files"
     searched = result["search_query"]
     db.add_message(chat_id, user_id, "assistant", result["answer"], result["sources"], meta, searched)
     st.session_state.messages.append(

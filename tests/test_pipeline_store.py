@@ -49,3 +49,25 @@ def test_hybrid_finds_exact_word():
     pipe = make_pipeline()
     top = pipe.retrieve("PayPal", use_hybrid=True, use_rerank=False, final_k=1)
     assert top[0]["chunk_id"] == 2
+
+
+def two_file_pipeline():
+    pipe = RAGPipeline(FakeEmbedder(), None, None)
+    chunks = [dict(c) for c in CHUNKS] + [
+        {"chunk_id": 3, "text": "Refunds for staff purchases take 30 days to process.", "source": "staff.docx", "page": 1}]
+    pipe.file_names, pipe.page_count = ["a.pdf", "staff.docx"], 4
+    pipe._build_indexes(chunks, FakeEmbedder().encode([c["text"] for c in chunks]))
+    return pipe
+
+
+def test_filter_searches_only_the_chosen_files():
+    pipe = two_file_pipeline()
+    for hybrid in (True, False):
+        found = pipe.retrieve("refunds within 30 days", hybrid, False, 4, sources=["staff.docx"])
+        assert [c["source"] for c in found] == ["staff.docx"]  # a.pdf's refund chunk is never a candidate
+    everything = pipe.retrieve("refunds within 30 days", True, False, 4)
+    assert {c["source"] for c in everything} == {"a.pdf", "staff.docx"}
+
+
+def test_filter_with_unknown_file_returns_nothing():
+    assert two_file_pipeline().retrieve("refunds", True, False, 4, sources=["missing.pdf"]) == []

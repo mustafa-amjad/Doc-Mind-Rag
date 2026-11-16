@@ -1,0 +1,6 @@
+Northwind store hours
+
+The Portland flagship store is open 9 AM to 9 PM, Monday to Saturday, and 10 AM to 6 PM on Sunday.
+The Seattle store is open 10 AM to 8 PM every day.
+All stores are closed on Thanksgiving Day and December 25.
+Free alterations are offered at the Portland store only, for items bought at full price.

@@ -3,7 +3,7 @@
 **Live demo:** [docmind-mustafa.streamlit.app](https://docmind-mustafa.streamlit.app)
 
 **Chat with your PDFs. Get answers with page-level citations. Your chats are saved.**
-A production-style Retrieval-Augmented Generation (RAG) app with **hybrid search (BM25 + vector)**, **FAISS HNSW indexing**, **cross-encoder re-ranking**, **chat memory**, **user accounts**, and **saved / pinned chats**. Powered by **Groq (Llama 3.3 70B)** and **Streamlit**.
+A production-style Retrieval-Augmented Generation (RAG) app with **hybrid search (BM25 + vector)**, **FAISS HNSW indexing**, **cross-encoder re-ranking**, **chat memory**, **user accounts**, and **saved / pinned chats**. Powered by **Groq (gpt-oss-120b)** and **Streamlit**.
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![Streamlit](https://img.shields.io/badge/UI-Streamlit-ff4b4b)
@@ -68,10 +68,14 @@ flowchart LR
 - **OCR for scans and pictures** (pure pip, installed with the app, can be switched off per upload): scanned PDF pages, image files, and the words inside charts and screenshots embedded in PDF and Word files. Mixed PDFs (typed + scanned pages) are handled page by page. Tiny icons and repeated logos are skipped. Evidence shows "OCR" / "Picture" badges because recognised text can contain small errors
 - **AI description of charts and diagrams** (optional toggle): each picture is sent to a Groq vision model (`VISION_MODEL`, default `qwen/qwen3.8-27b`) and its description is indexed, so "what does the chart on page 4 show?" can be answered
 
+**Chunking**
+- Each page is split at its headings first (numbered titles like "2. Returns and refunds", Markdown `#`, ALL-CAPS titles), so one chunk never mixes two sections. A contents list stays together
+- Sections longer than 800 characters (about 200 tokens) are cut at paragraphs, then lines, then sentences, with a 100-character overlap. Every chunk keeps its file name and page
+
 **Retrieval**
-- Hybrid search (BM25 + vectors) with RRF, optional cross-encoder re-ranking
+- Retrieve wide, then re-rank: BM25 and vector search each return their top 20, Reciprocal Rank Fusion merges them, and a cross-encoder re-ranks the 20 candidates and keeps the best 4 for the AI (adjustable 1–8)
+- **Search in:** pick which files of a chat a question searches. The filter is applied inside both searches (a FAISS ID selector and masked BM25 scores), so the top 20 always come from the chosen files
 - Flat or HNSW index chosen automatically by corpus size
-- Adjustable number of passages sent to the AI
 
 **Chats and accounts**
 - Sign up / log in (passwords stored as salted PBKDF2 hashes, never in plain text)
@@ -81,7 +85,7 @@ flowchart LR
 - **New chat**, **Recent chats**, **Pinned chats**, one-click switching, rename, delete (with confirmation)
 - Each chat keeps its own documents. Reopen an old chat and keep asking. No re-upload, no re-embedding
 - Add more PDFs to a chat or replace them
-- Chat memory understands follow-up questions and shows "Understood as: ..."
+- Chat memory understands follow-up questions and shows "Searched for: ..."
 - Users can only see their own chats (every query is scoped by user id)
 
 **Interface**
@@ -130,7 +134,8 @@ docmind-rag/
 │   ├── evidence.py         # finds the cited sentences and their place on the PDF page
 │   └── pipeline.py         # connects everything, save / load
 ├── scripts/evaluate.py     # Hit@k and MRR for 4 retrieval setups
-├── eval/                   # example test questions
+├── scripts/eval_answers.py # end-to-end answer test (24 questions, expected answers + citations)
+├── eval/                   # answer test set, its sample documents, last run
 ├── tests/                  # unit tests
 ├── data/                   # saved accounts, chats, indexes (git-ignored)
 ├── assets/                 # screenshots / demo GIF
@@ -207,7 +212,15 @@ Accounts, chats and indexes are stored in the `docmind-data` volume, so they sur
 
 ## Evaluation
 
-Measure what hybrid search and re-ranking actually add on **your** documents (no Groq key needed):
+**Answer test (end to end).** `eval/answers.json` holds 24 questions about the five sample documents in `eval/docs` (a fictional company: a policy handbook PDF, a Word file with a table and a chart, a scanned notice, a text file, a staff-benefits Word file). Each question has the text the answer must contain, the file and page it must cite, or "must say it couldn't find that". They include follow-ups, chart and table questions, false premises, details the documents don't mention, and a prompt injection. Re-run it after any change to chunking, retrieval or the prompt:
+
+```bash
+python scripts/eval_answers.py      # needs GROQ_API_KEY in .env; prints PASS/FAIL per question
+```
+
+The latest result is saved in `eval/last_run.json` (date, model, settings, every answer and what it cited).
+
+**Retrieval only.** Measure what hybrid search and re-ranking actually add on **your** documents (no Groq key needed):
 
 ```bash
 cp eval/questions.example.json eval/questions.json   # edit with your own questions
