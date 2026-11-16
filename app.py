@@ -646,6 +646,9 @@ def settings_dialog() -> None:
 
 
 # ====================== START ======================
+CSS = (Path(__file__).parent / "assets" / "docmind.css").read_text(encoding="utf-8")
+st.markdown(f"<style>{CSS}</style>", unsafe_allow_html=True)  # every screen, sign-in included: orange buttons, panels, motion
+
 db.init_db()  # creates data/docmind.db and tables on first run
 saved_token = cookies.sync()  # saves/clears the sign-in token in the browser, returns the saved one
 
@@ -707,8 +710,6 @@ flash = st.session_state.pop("flash", None)
 if flash:
     st.toast(flash, icon=":material/check_circle:")
 
-CSS = (Path(__file__).parent / "assets" / "docmind.css").read_text(encoding="utf-8")
-st.markdown(f"<style>{CSS}</style>", unsafe_allow_html=True)  # structure: header bar, panels, lines, motion
 
 with st.sidebar:
     st.html('<div class="brand"><span class="mark">D</span><span>DocMind</span></div>')
