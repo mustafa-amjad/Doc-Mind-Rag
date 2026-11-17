@@ -324,8 +324,8 @@ def render_documents_panel(pipeline: RAGPipeline, chat_id: int | None, messages:
     with st.container(key="docs_panel"):
         st.html('<p class="panel-title">Documents</p>')
         if not pipeline.is_ready:
-            st.caption("No documents in this chat yet. Attach files with the + in the message box, "
-                       "or add a link below.")
+            st.caption("No documents in this chat yet. Upload files or add a link below "
+                       "(or use the + in the message box).")
         else:
             rows = file_rows(pipeline.chunks)
             stats = st.session_state.stats or pipeline.stats()
@@ -344,10 +344,19 @@ def render_documents_panel(pipeline: RAGPipeline, chat_id: int | None, messages:
                         st.checkbox("Use in answers", value=True, key=f"use_{chat_id}_{row['name']}",
                                     help="Untick to leave this file out of the search (a filter applied inside "
                                          "both searches).")
-        with st.form(f"link_form_{chat_id}", border=False, clear_on_submit=True):
-            link = st.text_input("Add a link", placeholder="Web page or PDF link", label_visibility="collapsed")
-            if st.form_submit_button("Add link", icon=":material/link:", width="stretch", type="primary") and link.strip():
-                st.session_state.pending_link = link.strip()
+        with st.form(f"add_form_{chat_id}", border=False, clear_on_submit=True):
+            uploads = st.file_uploader("Upload files", type=SUPPORTED_TYPES, accept_multiple_files=True,
+                                       label_visibility="collapsed",
+                                       help="PDF, Word, text, Markdown, HTML or an image (PNG, JPG, WEBP, BMP, GIF, TIFF)")
+            link = st.text_input("Add a link", placeholder="Or paste a web page or PDF link",
+                                 label_visibility="collapsed")
+            if st.form_submit_button("Add to chat", icon=":material/upload_file:", width="stretch", type="primary"):
+                if uploads:
+                    st.session_state.pending_uploads = [(f.name, f.getvalue()) for f in uploads]
+                if link.strip():
+                    st.session_state.pending_link = link.strip()
+                if not uploads and not link.strip():
+                    st.toast("Choose a file or paste a link first.", icon=":material/upload_file:")
         for warning in st.session_state.get("ingest_warnings", []):  # e.g. vision model unavailable
             st.warning(warning, icon=":material/warning:")
 
@@ -389,8 +398,8 @@ def welcome() -> None:
     """Empty chat: what DocMind does, in three steps."""
     st.html('<div class="hello"><h2>Ask your documents</h2>'
             '<p>Answers come only from your files, and every answer shows the page it came from.</p></div>')
-    steps = [("1", "Attach files", "Use the + in the message box: PDFs, Word files, text, images. "
-                                   "Or add a link on the right."),
+    steps = [("1", "Add files", "Upload PDFs, Word files, text or images in the Documents panel on the right, "
+                                "or paste a link. The + in the message box works too."),
              ("2", "Ask a question", "Follow-up questions keep their context."),
              ("3", "Check the source", "Click a source under an answer to open its page, sentence highlighted.")]
     with st.container(horizontal=True, gap=None, key="steps"):
@@ -845,15 +854,16 @@ if spoken is not None:
     if not transcript:
         st.toast("I didn't catch that. Try again, a little closer to the mic.", icon=":material/mic_off:")
 
-# ----- new files: from the + in the message box or the link box -----
+# ----- new files: from the + in the message box, or the upload and link boxes in the Documents panel -----
 attached = list(submitted.files) if submitted and getattr(submitted, "files", None) else []
+uploaded = st.session_state.pop("pending_uploads", None) or []
 link = st.session_state.pop("pending_link", None)
-if attached or link:
+if attached or uploaded or link:
     with chat_area:
         with st.spinner("Reading your files..." + (" Scans and images take a little longer."
                                                    if st.session_state.get("opt_ocr") else "")):
             try:
-                files = [(f.name, f.getvalue()) for f in attached]
+                files = [(f.name, f.getvalue()) for f in attached] + uploaded
                 if link:
                     files.append(fetch_url(link))  # public sites only
                 add_files_to_chat(files)
