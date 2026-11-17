@@ -8,7 +8,7 @@ from pathlib import Path  # builds file paths that work on Windows and Mac
 
 import streamlit as st
 
-from docmind import auth, config, cookies, db, evidence, ocr
+from docmind import auth, config, cookies, db, evidence, ocr, voice
 from docmind.embedder import Embedder
 from docmind.llm import LLM, NOT_FOUND, friendly_error
 from docmind.loader import SUPPORTED_TYPES, fetch_url
@@ -33,6 +33,42 @@ SUGGESTIONS = [  # one-click starter questions shown after indexing
 ]
 USER_AVATAR = ":material/person:"
 ASSISTANT_AVATAR = ":material/description:"
+SPOKEN = ":small[:gray[:material/mic: Spoken · transcribed by Whisper]]"
+
+# Reads answers aloud with the browser's own speech voice (no API call). Each request has an id, so an
+# answer is spoken once, not again on every rerun; "Listen" sends a new id to hear it again.
+SPEAKER = st.components.v2.component(
+    "docmind_speaker",
+    html="<span hidden></span>",
+    js="""
+export default function (component) {
+  const { data } = component
+  const synth = window.speechSynthesis
+  if (!synth || !data || !data.id || !data.text) return
+  let last = ""
+  try { last = sessionStorage.getItem("docmind_spoken") || "" } catch (error) {}
+  if (last === data.id) return
+  try { sessionStorage.setItem("docmind_spoken", data.id) } catch (error) {}
+  synth.cancel()
+  const say = () => {
+    const line = new SpeechSynthesisUtterance(data.text)
+    const voices = synth.getVoices()
+    const english = voices.filter(v => /^en/i.test(v.lang))
+    line.voice = english.find(v => /natural|online|google|samantha|aria|jenny/i.test(v.name)) || english[0] || null
+    line.lang = line.voice ? line.voice.lang : "en-US"
+    synth.speak(line)
+  }
+  if (synth.getVoices().length) say(); else synth.addEventListener("voiceschanged", say, { once: true })
+}
+""",
+)
+
+
+def queue_speech(index: int, text: str, again: bool = False) -> None:
+    """Read this answer aloud on the next draw of the speaker."""
+    count = st.session_state.get("speech_count", 0) + (1 if again else 0)
+    st.session_state.speech_count = count
+    st.session_state.speak = {"id": f"{st.session_state.chat_id}-{index}-{count}", "text": voice.speech_text(text)}
 _MD_SPECIAL = re.compile(r"([\\`*_{}\[\]()#+\-.!|<>~$:])")  # characters Streamlit markdown would interpret
 
 
@@ -88,13 +124,15 @@ def render_answer(message: dict, index: int, question: str = "") -> None:
         files = len({sources[n - 1]["source"] for n in numbers})
         st.badge(f"Cited from {files} source{'s' if files > 1 else ''}", icon=":material/check:", color="green")
     st.markdown(answer_markdown(content))
-    if numbers:
-        with st.container(horizontal=True, gap="small"):
-            for n in numbers:
-                src = sources[n - 1]
-                if st.button(f"{n} · {src['source']} · p.{src['page']}", key=f"cite_{index}_{n}",
-                             icon=":material/description:", help="Open the page with the cited sentence highlighted"):
-                    source_dialog(index, n)
+    with st.container(horizontal=True, gap="small", vertical_alignment="center"):
+        for n in numbers:
+            src = sources[n - 1]
+            if st.button(f"{n} · {src['source']} · p.{src['page']}", key=f"cite_{index}_{n}",
+                         icon=":material/description:", help="Open the page with the cited sentence highlighted"):
+                source_dialog(index, n)
+        if st.button("Listen", key=f"listen_{index}", type="tertiary", icon=":material/volume_up:",
+                     help="Read this answer aloud"):
+            queue_speech(index, content, again=True)
     if sources:
         render_answer_extras(sources, message.get("meta", ""), message.get("searched", ""), question)
 
@@ -346,10 +384,12 @@ def welcome() -> None:
 
 
 def render_composer(chat_id: int | None, has_files: bool):
-    """Message box (attach files with the +) and, under it, the model picker and token use."""
+    """Message box (attach files with the +, speak with the mic) and, under it, the model picker,
+    the read-aloud switch and token use."""
     with st.container(key="composer"):
-        value = st.chat_input("Ask about your documents" if has_files else "Attach files with +, then ask",
-                              accept_file="multiple", file_type=SUPPORTED_TYPES, key="ask_box")
+        value = st.chat_input("Ask about your documents, or tap the mic" if has_files else "Attach files with +, then ask",
+                              accept_file="multiple", file_type=SUPPORTED_TYPES, accept_audio=True, key="ask_box")
+        SPEAKER(data=st.session_state.get("speak"), key="speaker", height=1)
         llm = st.session_state.llm
         models = answer_models(llm.client) or [{"id": llm.model, "context_window": None}]
         ids = [m["id"] for m in models]
@@ -360,12 +400,14 @@ def render_composer(chat_id: int | None, has_files: bool):
                                   key="model_choice", label_visibility="collapsed", width=210,
                                   help="Groq model that writes the answers. The list comes live from Groq.")
             llm.model = chosen
+            st.toggle("Read aloud", key="read_aloud", help="Read every answer aloud. Answers to spoken questions "
+                                                           "are always read aloud.")
             window = next((m["context_window"] for m in models if m["id"] == chosen), None)
             used = (st.session_state.get("context_usage") or {}).get(chat_id)
             tokens = used["prompt_tokens"] if used else 0
             st.space("stretch")
             text = f"{tokens:,} / {window:,} tokens" if window else f"{tokens:,} tokens"
-            st.markdown(f":small[:gray[:material/memory: {text}]]",
+            st.markdown(f":small[:gray[:material/memory: {text}]]", width="content",
                         help="Tokens the last answer sent to the model (rules, passages found and recent chat), "
                              "out of the model's context window.")
             if window:
@@ -755,6 +797,8 @@ with center:
             with st.chat_message(message["role"], avatar=USER_AVATAR if is_user else ASSISTANT_AVATAR):
                 if is_user:
                     st.markdown(f"**{md_escape(message['content'])}**")
+                    if (st.session_state.chat_id, index) in st.session_state.get("voice_msgs", set()):
+                        st.markdown(SPOKEN)
                     previous_user_question = message["content"]
                 else:
                     render_answer(message, index, previous_user_question)
@@ -767,6 +811,20 @@ with center:
                             st.session_state.pending_question = suggestion  # picked up on the next run
                             st.rerun()
     submitted = render_composer(st.session_state.chat_id, pipeline.is_ready)
+
+# ----- a spoken question: Whisper turns it into text, shown as the user's message -----
+spoken = getattr(submitted, "audio", None) if submitted else None
+transcript = ""
+if spoken is not None:
+    with chat_area:
+        with st.spinner("Transcribing..."):
+            try:
+                transcript = voice.transcribe(st.session_state.llm.client, spoken.getvalue(), spoken.name or "question.wav")
+            except Exception as error:  # API problem: say so, keep the chat usable
+                st.error(friendly_error(error), icon=":material/error:")
+                st.stop()
+    if not transcript:
+        st.toast("I didn't catch that. Try again, a little closer to the mic.", icon=":material/mic_off:")
 
 # ----- new files: from the + in the message box or the link box -----
 attached = list(submitted.files) if submitted and getattr(submitted, "files", None) else []
@@ -784,12 +842,14 @@ if attached or link:
                 st.error(str(error), icon=":material/error:")
                 st.stop()
     typed = (submitted.text or "").strip() if submitted else ""
-    if typed:
-        st.session_state.pending_question = typed  # ask it once the files are in
+    if typed or transcript:
+        st.session_state.pending_question = typed or transcript  # ask it once the files are in
+        st.session_state.pending_voice = bool(transcript and not typed)
     st.rerun()
 
 typed = (getattr(submitted, "text", submitted) or "").strip() if submitted else ""
-question = st.session_state.pop("pending_question", None) or typed  # clicked suggestion wins over typed text
+question = st.session_state.pop("pending_question", None) or typed or transcript  # suggestion, typed, then spoken
+asked_by_voice = st.session_state.pop("pending_voice", False) or bool(transcript and question == transcript)
 if question and not pipeline.is_ready:
     st.toast("Attach a file first: use the + in the message box.", icon=":material/attach_file:")
     question = None
@@ -802,6 +862,8 @@ if question and st.session_state.chat_id:
     with chat_area:
         with st.chat_message("user", avatar=USER_AVATAR):
             st.markdown(f"**{md_escape(question)}**")
+            if asked_by_voice:
+                st.markdown(SPOKEN)
         with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
             with st.spinner("Searching your files..."):
                 try:
@@ -812,6 +874,8 @@ if question and st.session_state.chat_id:
     if not st.session_state.messages:  # first question names the chat
         db.rename_chat(chat_id, user_id, shorten(question, 40))
     db.add_message(chat_id, user_id, "user", question)
+    if asked_by_voice:  # remembered for this session, so the bubble keeps its "Spoken" tag
+        st.session_state.setdefault("voice_msgs", set()).add((chat_id, len(st.session_state.messages)))
     st.session_state.messages.append({"role": "user", "content": question})
     meta = (f"{result['total_ms'] / 1000:.1f} s total · retrieval {result['retrieve_ms']:.0f} ms · {mode} · "
             f"{short_model(st.session_state.llm.model)}")
@@ -826,4 +890,6 @@ if question and st.session_state.chat_id:
     usage = getattr(st.session_state.llm, "last_usage", None)  # tokens the model saw for this answer
     if usage:
         st.session_state.setdefault("context_usage", {})[chat_id] = usage
+    if asked_by_voice or st.session_state.get("read_aloud"):  # talk back: spoken question -> spoken answer
+        queue_speech(len(st.session_state.messages) - 1, result["answer"])
     st.rerun()  # redraw so the sidebar (recent order) and the documents panel update

@@ -92,6 +92,7 @@ flowchart LR
 - Three panes: chats on the left (reading options, Pinned / Recents with a "..." menu to pin, rename, export or delete, and the account row), the conversation in the middle, the chat's documents as a grid of cards on the right
 - Attach files with the **+** in the message box (or add a link on the right). Under the box: a **model picker** (the answer models Groq offers, listed live) and the **tokens** the last answer used out of the model's context window
 - Click a source under an answer to open the page in a pop-up with the cited sentence highlighted
+- **Voice:** tap the mic in the message box and ask out loud. Whisper on Groq (`whisper-large-v3-turbo`) transcribes it, the transcript appears as your message (tagged "Spoken"), and the answer is read back with the browser's speech voice. Turn on **Read aloud** to hear every answer, or press **Listen** under any answer
 - Ivory, emerald and orange theme (`.streamlit/config.toml` + `assets/docmind.css`), Material icons, one-click starter questions
 - Export any chat to Markdown
 
