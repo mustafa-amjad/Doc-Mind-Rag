@@ -1,3 +1,5 @@
+<p><img src="assets/logo.svg" alt="DocMind" height="56"></p>
+
 # DocMind RAG
 
 **Live demo:** [docmind-mustafa.streamlit.app](https://docmind-mustafa.streamlit.app)

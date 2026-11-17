@@ -29,7 +29,9 @@
 
 /* ---------- sidebar ---------- */
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 17px; letter-spacing: -0.01em; color: #1a1a19; }
-.brand .mark { width: 26px; height: 26px; border-radius: 7px; background: var(--dm-accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+.brand .mark { width: 30px; height: 30px; flex-shrink: 0; border-radius: 8px; display: block; }
+.brand-lg { gap: 12px; font-size: 22px; letter-spacing: -0.02em; margin-bottom: 6px; }
+.brand-lg .mark { width: 40px; height: 40px; border-radius: 10px; }
 [data-testid="stSidebar"] [data-testid="stExpander"] details { background: #fff; border-color: var(--dm-line); border-radius: 12px; }
 [data-testid="stSidebar"] [data-testid="stExpander"] summary p { font-weight: 600; }
 .side-label { margin: 10px 0 2px 8px; font-size: 12px; font-weight: 500; color: #7a776e; }

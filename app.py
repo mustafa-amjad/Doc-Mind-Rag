@@ -1,6 +1,7 @@
 """DocMind: Streamlit UI with login, saved chats, pinned chats and chat memory.
 Layout: chats on the left, the conversation in the middle, the chat's documents on the right.
 Run with:  streamlit run app.py"""
+import base64  # inlines the logo image
 import html  # escapes the username in the account row
 import re  # used to clean whitespace in snippets
 import shutil  # deletes a chat's saved index folder
@@ -21,7 +22,7 @@ PLAN = "Free plan"  # every DocMind account is free; there are no paid plans
 
 st.set_page_config(  # must be the FIRST Streamlit call
     page_title="DocMind",
-    page_icon=":material/description:",
+    page_icon=str(Path(__file__).parent / "assets" / "favicon.png"),  # the DocMind mark
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -34,6 +35,8 @@ SUGGESTIONS = [  # one-click starter questions shown after indexing
 USER_AVATAR = ":material/person:"
 ASSISTANT_AVATAR = ":material/description:"
 SPOKEN = ":small[:gray[:material/mic: Spoken · transcribed by Whisper]]"
+LOGO_MARK = "data:image/svg+xml;base64," + base64.b64encode(  # the DocMind mark, inlined for st.html
+    (Path(__file__).parent / "assets" / "logo-mark.svg").read_bytes()).decode("ascii")
 
 # Reads answers aloud with the browser's own speech voice (no API call). Each request has an id, so an
 # answer is spoken once, not again on every rerun; "Listen" sends a new id to hear it again.
@@ -462,8 +465,9 @@ def logout() -> None:
 
 # ====================== login screen ======================
 def page_header(title: str = "Sign in to DocMind", note: str = "") -> None:
-    """Title block for the sign-in screens."""
+    """Title block for the sign-in screens: the DocMind logo, then the title."""
     st.space("large")
+    st.html(f'<div class="brand brand-lg"><img class="mark" src="{LOGO_MARK}" alt=""><span>DocMind</span></div>')
     st.title(title, anchor=False)
     if note:
         st.caption(note)
@@ -742,7 +746,7 @@ if flash:
 
 # ====================== left sidebar: logo, reading options, chats, account ======================
 with st.sidebar:
-    st.html('<div class="brand"><span class="mark">D</span><span>DocMind</span></div>')
+    st.html(f'<div class="brand"><img class="mark" src="{LOGO_MARK}" alt=""><span>DocMind</span></div>')
     if st.button("New chat", icon=":material/edit_square:", width="stretch", key="new_chat", type="primary"):
         new_chat()
         st.rerun()
