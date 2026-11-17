@@ -1,7 +1,7 @@
 """DocMind: Streamlit UI with login, saved chats, pinned chats and chat memory.
 Layout: chats on the left, the conversation in the middle, the chat's documents on the right.
 Run with:  streamlit run app.py"""
-import base64  # inlines the logo image
+import base64  # embeds the logo's lens and spark as images
 import html  # escapes the username in the account row
 import re  # used to clean whitespace in snippets
 import shutil  # deletes a chat's saved index folder
@@ -35,8 +35,23 @@ SUGGESTIONS = [  # one-click starter questions shown after indexing
 USER_AVATAR = ":material/person:"
 ASSISTANT_AVATAR = ":material/description:"
 SPOKEN = ":small[:gray[:material/mic: Spoken · transcribed by Whisper]]"
-LOGO_MARK = "data:image/svg+xml;base64," + base64.b64encode(  # the DocMind mark, inlined for st.html
-    (Path(__file__).parent / "assets" / "logo-mark.svg").read_bytes()).decode("ascii")
+# The DocMind wordmark: "Doc" speaks from a chat bubble and its "o" is a magnifying glass that finds the line;
+# the "i" in Mind carries an idea spark. Built from the app's own font, so it stays sharp at any size.
+# st.html drops inline <svg>, so the lens and the spark are small SVG images (data URIs).
+def _svg_image(css_class: str, view_box: str, drawing: str) -> str:
+    svg = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{view_box}">{drawing}</svg>'
+    return f'<img class="{css_class}" alt="" src="data:image/svg+xml;base64,{base64.b64encode(svg.encode()).decode()}">'
+
+
+_LENS_O = _svg_image("dm-lens", "0 0 26 26",
+                     '<circle cx="10" cy="10" r="8.2" fill="none" stroke="#FAFAF7" stroke-width="3.8"/>'
+                     '<rect x="5.2" y="8.4" width="9.6" height="3.2" rx="1.6" fill="#E8692B"/>'
+                     '<path d="M16.4 16.4 22.5 22.5" stroke="#E8692B" stroke-width="4.2" stroke-linecap="round"/>')
+_SPARK_I = '<span class="dm-i">ı' + _svg_image(
+    "dm-spark", "0 0 10 10", '<path d="M5 0C5.6 3.4 6.6 4.4 10 5 6.6 5.6 5.6 6.6 5 10 4.4 6.6 3.4 5.6 0 5 3.4 4.4 4.4 '
+                             '3.4 5 0z" fill="#E8692B"/>') + '</span>'
+WORDMARK = (f'<span class="dm-word" role="img" aria-label="DocMind"><span class="dm-bubble">D{_LENS_O}c</span>'
+            f'<span class="dm-mind">M{_SPARK_I}nd</span></span>')
 
 # Reads answers aloud with the browser's own speech voice (no API call). Each request has an id, so an
 # answer is spoken once, not again on every rerun; "Listen" sends a new id to hear it again.
@@ -467,7 +482,7 @@ def logout() -> None:
 def page_header(title: str = "Sign in to DocMind", note: str = "") -> None:
     """Title block for the sign-in screens: the DocMind logo, then the title."""
     st.space("large")
-    st.html(f'<div class="brand brand-lg"><img class="mark" src="{LOGO_MARK}" alt=""><span>DocMind</span></div>')
+    st.html(f'<div class="brand brand-lg">{WORDMARK}</div>')
     st.title(title, anchor=False)
     if note:
         st.caption(note)
@@ -746,7 +761,7 @@ if flash:
 
 # ====================== left sidebar: logo, reading options, chats, account ======================
 with st.sidebar:
-    st.html(f'<div class="brand"><img class="mark" src="{LOGO_MARK}" alt=""><span>DocMind</span></div>')
+    st.html(f'<div class="brand">{WORDMARK}</div>')
     if st.button("New chat", icon=":material/edit_square:", width="stretch", key="new_chat", type="primary"):
         new_chat()
         st.rerun()

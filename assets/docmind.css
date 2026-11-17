@@ -29,9 +29,15 @@
 
 /* ---------- sidebar ---------- */
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 17px; letter-spacing: -0.01em; color: #1a1a19; }
-.brand .mark { width: 30px; height: 30px; flex-shrink: 0; border-radius: 8px; display: block; }
-.brand-lg { gap: 12px; font-size: 22px; letter-spacing: -0.02em; margin-bottom: 6px; }
-.brand-lg .mark { width: 40px; height: 40px; border-radius: 10px; }
+.brand-lg { margin-bottom: 10px; }
+/* the DocMind wordmark: "Doc" in a chat bubble whose "o" is a lens, "Mind" with a spark on the i */
+.dm-word { display: inline-block; font-size: 23px; font-weight: 600; letter-spacing: -0.035em; line-height: 1.1; white-space: nowrap; color: #1a1a19; padding-bottom: 0.18em; }
+.brand-lg .dm-word { font-size: 36px; }
+.dm-bubble { position: relative; display: inline-block; background: var(--dm-accent); color: #faf9f5; padding: 0.03em 0.24em 0.1em; margin-right: 0.14em; border-radius: 0.2em; }
+.dm-bubble::after { content: ""; position: absolute; left: 0.18em; bottom: -0.2em; width: 0.26em; height: 0.26em; background: var(--dm-accent); clip-path: polygon(0 0, 100% 0, 0 100%); }
+.dm-lens { display: inline-block; width: 0.66em; height: 0.66em; margin: 0 -0.04em 0 0.01em; vertical-align: -0.13em; }
+.dm-i { position: relative; display: inline-block; }
+.dm-spark { position: absolute; left: 50%; top: -0.17em; width: 0.34em; height: 0.34em; transform: translateX(-50%); }
 [data-testid="stSidebar"] [data-testid="stExpander"] details { background: #fff; border-color: var(--dm-line); border-radius: 12px; }
 [data-testid="stSidebar"] [data-testid="stExpander"] summary p { font-weight: 600; }
 .side-label { margin: 10px 0 2px 8px; font-size: 12px; font-weight: 500; color: #7a776e; }

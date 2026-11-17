@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="DocMind">
-  <!-- DocMind mark: a page whose one sentence is highlighted. Emerald tile, ivory page, orange highlight. -->
-  <rect width="64" height="64" rx="15" fill="#0B5D45"/>
-  <path d="M20 11.5h17.5l9 9V50a2.5 2.5 0 0 1-2.5 2.5H20a2.5 2.5 0 0 1-2.5-2.5V14a2.5 2.5 0 0 1 2.5-2.5z" fill="#FAFAF7"/>
-  <path d="M37.5 11.5v6.5a2.5 2.5 0 0 0 2.5 2.5h6.5z" fill="#BFDCCF"/>
-  <rect x="22.5" y="26" width="17" height="3" rx="1.5" fill="#0B5D45" opacity="0.32"/>
-  <rect x="21" y="32.5" width="21" height="6" rx="3" fill="#E8692B"/>
-  <rect x="22.5" y="42" width="12" height="3" rx="1.5" fill="#0B5D45" opacity="0.32"/>
+  <!-- DocMind icon: a chat answer (emerald bubble) with a magnifying glass that finds the line (ivory lens, orange handle). -->
+  <path d="M14 9h36a7 7 0 0 1 7 7v24a7 7 0 0 1-7 7H28l-10 9v-9h-4a7 7 0 0 1-7-7V16a7 7 0 0 1 7-7z" fill="#0B5D45"/>
+  <g transform="translate(17 13) scale(1.25)">
+    <circle cx="10" cy="10" r="8.2" fill="none" stroke="#FAFAF7" stroke-width="3.8"/>
+    <rect x="5.2" y="8.4" width="9.6" height="3.2" rx="1.6" fill="#E8692B"/>
+    <path d="M16.4 16.4 22.5 22.5" stroke="#E8692B" stroke-width="4.2" stroke-linecap="round"/>
+  </g>
 </svg>

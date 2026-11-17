@@ -1,4 +1,4 @@
-<p><img src="assets/logo.svg" alt="DocMind" height="56"></p>
+<p><img src="assets/logo.png" alt="DocMind" height="64"></p>
 
 # DocMind RAG
 
