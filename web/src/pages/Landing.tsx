@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useSession } from "../session";
+import { Wordmark } from "../Logo";
 
 export default function Landing() {
   const { user } = useSession();
@@ -7,7 +8,7 @@ export default function Landing() {
   return (
     <div className="landing">
       <header className="wrap site-head">
-        <Link className="logo" to="/">DocMind</Link>
+        <Link className="logo" to="/"><Wordmark size={26} /></Link>
         <nav aria-label="Site">
           <a href="#how">How it works</a>
           <a href="#features">Features</a>
@@ -33,7 +34,7 @@ export default function Landing() {
         <div className="preview-frame">
           <div className="preview">
             <div className="p-side">
-              <span className="serif" style={{ fontSize: 22 }}>DocMind</span>
+              <Wordmark size={20} />
               <span className="on">Ask</span>
               <span className="off">Library</span>
               <span className="off">Settings</span>
@@ -115,7 +116,7 @@ export default function Landing() {
 
       <footer className="site-foot">
         <div className="wrap">
-          <span className="serif" style={{ fontSize: 22, color: "var(--ink)" }}>DocMind</span>
+          <Wordmark size={22} />
           <span>Built by Mustafa Amjad</span>
           <div className="links"><a href="#">Privacy</a><a href="#">Terms</a><a href="mailto:[YOUR EMAIL]">Contact</a></div>
         </div>

@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useSession } from "../session";
+import { Wordmark } from "../Logo";
 
 function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const { setUser } = useSession();
@@ -39,7 +40,7 @@ function AuthForm({ mode }: { mode: "login" | "signup" }) {
     return (
       <div className="auth">
         <div className="card auth-card">
-          <Link className="logo" to="/">DocMind</Link>
+          <Link className="logo" to="/"><Wordmark size={26} /></Link>
           <h1>Save your recovery code</h1>
           <p className="muted" style={{ margin: 0 }}>It is the only way to reset a forgotten password, and it is shown once. Keep it in a password manager.</p>
           <div className="code">{code}</div>
@@ -52,7 +53,7 @@ function AuthForm({ mode }: { mode: "login" | "signup" }) {
   return (
     <div className="auth">
       <div className="card auth-card">
-        <Link className="logo" to="/">DocMind</Link>
+        <Link className="logo" to="/"><Wordmark size={26} /></Link>
         <h1>{mode === "login" ? "Welcome back" : "Create your account"}</h1>
         <form onSubmit={submit}>
           <label className="field">Username

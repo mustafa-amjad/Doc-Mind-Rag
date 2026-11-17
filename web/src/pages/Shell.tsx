@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useMatch, useNavigate } from "react-router-dom";
 import { api, chipColor, initials } from "../api";
 import { Book, Chat, Chevron, Gear, Home as HomeIcon, Plus } from "../icons";
 import { useSession } from "../session";
+import { Wordmark } from "../Logo";
 
 /** Modal that creates a workspace and opens its Library. */
 export function NewWorkspace({ onClose }: { onClose: () => void }) {
@@ -64,7 +65,7 @@ export default function Shell() {
   return (
     <div className="shell">
       <nav className="sidebar" aria-label="DocMind">
-        <div className="brand"><Link to="/app">DocMind</Link></div>
+        <div className="brand"><Link to="/app"><Wordmark size={22} /></Link></div>
 
         <div className="switcher" ref={menuRef}>
           <button type="button" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>

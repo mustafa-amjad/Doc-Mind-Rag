@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="DocMind">
+  <!-- DocMind icon: a chat answer (emerald bubble) with a magnifying glass that finds the line (ivory lens, orange handle). -->
+  <path d="M14 9h36a7 7 0 0 1 7 7v24a7 7 0 0 1-7 7H28l-10 9v-9h-4a7 7 0 0 1-7-7V16a7 7 0 0 1 7-7z" fill="#0B5D45"/>
+  <g transform="translate(17 13) scale(1.25)">
+    <circle cx="10" cy="10" r="8.2" fill="none" stroke="#FAFAF7" stroke-width="3.8"/>
+    <rect x="5.2" y="8.4" width="9.6" height="3.2" rx="1.6" fill="#E8692B"/>
+    <path d="M16.4 16.4 22.5 22.5" stroke="#E8692B" stroke-width="4.2" stroke-linecap="round"/>
+  </g>
+</svg>

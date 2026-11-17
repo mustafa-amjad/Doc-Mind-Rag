@@ -360,3 +360,12 @@ table.files .tags { display: flex; gap: 4px; flex-wrap: wrap; }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .question p { font-size: 18px; }
 }
+
+/* ---------- DocMind wordmark (src/Logo.tsx): "Doc" in a chat bubble whose "o" is a lens, "Mind" with a spark ---------- */
+.dm-word { display: inline-block; font-family: var(--sans); font-size: 22px; font-weight: 600; letter-spacing: -0.035em; line-height: 1.1; white-space: nowrap; color: var(--ink); padding-bottom: 0.18em; }
+.dm-bubble { position: relative; display: inline-block; background: var(--accent); color: #faf9f5; padding: 0.03em 0.24em 0.1em; margin-right: 0.14em; border-radius: 0.2em; }
+.dm-bubble::after { content: ""; position: absolute; left: 0.18em; bottom: -0.2em; width: 0.26em; height: 0.26em; background: var(--accent); clip-path: polygon(0 0, 100% 0, 0 100%); }
+.dm-lens { display: inline-block; width: 0.66em; height: 0.66em; margin: 0 -0.04em 0 0.01em; vertical-align: -0.13em; }
+.dm-i { position: relative; display: inline-block; }
+.dm-spark { position: absolute; left: 50%; top: -0.17em; width: 0.34em; height: 0.34em; transform: translateX(-50%); }
+a:has(> .dm-word) { text-decoration: none; line-height: 0; }
