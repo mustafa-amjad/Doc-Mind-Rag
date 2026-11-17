@@ -290,7 +290,7 @@ def render_documents_panel(pipeline: RAGPipeline, chat_id: int | None, messages:
                                          "both searches).")
         with st.form(f"link_form_{chat_id}", border=False, clear_on_submit=True):
             link = st.text_input("Add a link", placeholder="Web page or PDF link", label_visibility="collapsed")
-            if st.form_submit_button("Add link", icon=":material/link:", width="stretch") and link.strip():
+            if st.form_submit_button("Add link", icon=":material/link:", width="stretch", type="primary") and link.strip():
                 st.session_state.pending_link = link.strip()
         for warning in st.session_state.get("ingest_warnings", []):  # e.g. vision model unavailable
             st.warning(warning, icon=":material/warning:")
@@ -531,17 +531,17 @@ def chat_row(chat: dict, active: bool, user_id: int) -> None:
             open_chat(chat_id)
             st.rerun()
         with st.popover("", icon=":material/more_horiz:", type="tertiary", key=f"menu_{chat_id}"):
-            if st.button("Unpin" if chat["pinned"] else "Pin", key=f"pin_{chat_id}", type="tertiary",
+            if st.button("Unpin" if chat["pinned"] else "Pin", key=f"pin_{chat_id}", type="tertiary", width="stretch",
                          icon=":material/keep_off:" if chat["pinned"] else ":material/keep:"):
                 db.set_pinned(chat_id, user_id, not chat["pinned"])
                 st.rerun()
-            if st.button("Rename", key=f"ren_{chat_id}", type="tertiary", icon=":material/edit:"):
+            if st.button("Rename", key=f"ren_{chat_id}", type="tertiary", icon=":material/edit:", width="stretch"):
                 rename_dialog(chat_id, chat["title"])
             if active and st.session_state.messages:
                 st.download_button("Export", data=chat_to_markdown(chat["title"], st.session_state.messages),
                                    file_name="docmind_chat.md", mime="text/markdown", type="tertiary",
-                                   icon=":material/download:", key=f"exp_{chat_id}")
-            if st.button("Delete", key=f"del_{chat_id}", type="tertiary", icon=":material/delete:"):
+                                   icon=":material/download:", key=f"exp_{chat_id}", width="stretch")
+            if st.button("Delete", key=f"del_{chat_id}", type="tertiary", icon=":material/delete:", width="stretch"):
                 st.session_state.confirm_delete = chat_id
                 st.rerun()
 
@@ -701,7 +701,7 @@ if flash:
 # ====================== left sidebar: logo, reading options, chats, account ======================
 with st.sidebar:
     st.html('<div class="brand"><span class="mark">D</span><span>DocMind</span></div>')
-    if st.button("New chat", icon=":material/edit_square:", width="stretch", key="new_chat"):
+    if st.button("New chat", icon=":material/edit_square:", width="stretch", key="new_chat", type="primary"):
         new_chat()
         st.rerun()
 

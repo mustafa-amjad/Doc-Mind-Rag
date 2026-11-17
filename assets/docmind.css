@@ -107,7 +107,10 @@ div[role="dialog"] [data-testid="stImage"] img { border: 1px solid var(--dm-line
 /* ---------- controls ---------- */
 [data-testid^="stBaseButton"] { transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease; }
 [data-testid^="stBaseButton"]:active:not(:disabled) { transform: scale(0.98); }
-div[role="dialog"] { animation: dm-pop 0.2s var(--dm-ease) both; }
+/* pop-in for real dialogs only: a popover (the "..." menu) is placed with an inline transform, which an
+   animation ending in "transform: none" would override and throw the menu into the window's corner */
+div[role="dialog"]:not([data-testid="stPopoverBody"]) { animation: dm-pop 0.2s var(--dm-ease) both; }
+[data-testid="stPopoverBody"] { animation: dm-fade 0.15s var(--dm-ease) both; }
 
 @keyframes dm-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes dm-fade { from { opacity: 0; } to { opacity: 1; } }
@@ -124,3 +127,23 @@ div[role="dialog"] { animation: dm-pop 0.2s var(--dm-ease) both; }
 
 /* the message box sits at the bottom of the window, like ChatGPT, even in a short chat */
 .st-key-conversation { min-height: calc(100vh - 17rem); }
+
+/* ---------- account row pinned to the bottom of the sidebar (like ChatGPT / Claude) ---------- */
+[data-testid="stSidebarUserContent"] { padding-bottom: 0.75rem; }
+[data-testid="stSidebarUserContent"] > div > [data-testid="stVerticalBlock"] { min-height: calc(100vh - 5.5rem); }
+[data-testid="stSidebarUserContent"] [data-testid="stLayoutWrapper"]:has(> .st-key-account) { margin-top: auto; position: sticky; bottom: 0; z-index: 2; }
+.st-key-account { position: static; margin-top: 0; }
+
+/* ---------- the chat's "..." menu: a compact dropdown ---------- */
+[data-testid="stPopoverBody"]:has([class*="st-key-pin_"]) { padding: 6px; width: 190px; min-width: 190px; border-radius: 12px; border: 1px solid var(--dm-line); box-shadow: 0 8px 24px rgba(20, 20, 18, 0.12); }
+[data-testid="stPopoverBody"]:has([class*="st-key-pin_"]) [data-testid="stVerticalBlock"] { gap: 2px; }
+[data-testid="stPopoverBody"]:has([class*="st-key-pin_"]) [data-testid^="stBaseButton"] { justify-content: flex-start; min-height: 34px; padding: 4px 10px; border-radius: 8px; color: #1a1a19; }
+[data-testid="stPopoverBody"]:has([class*="st-key-pin_"]) [data-testid^="stBaseButton"] > div { justify-content: flex-start; }
+[data-testid="stPopoverBody"]:has([class*="st-key-pin_"]) [data-testid^="stBaseButton"]:hover { background: var(--dm-hover); color: #1a1a19; }
+[data-testid="stPopoverBody"] [class*="st-key-del_"] [data-testid^="stBaseButton"],
+[data-testid="stPopoverBody"] [class*="st-key-del_"] [data-testid^="stBaseButton"]:hover { color: #b42318; }
+
+/* ---------- orange where you act: sources under answers, the send arrow ---------- */
+[class*="st-key-cite_"] [data-testid="stBaseButton-secondary"] { background: var(--dm-orange-soft); border-color: #f6cfb6; color: var(--dm-orange-dark); }
+[class*="st-key-cite_"] [data-testid="stBaseButton-secondary"]:hover:not(:disabled) { background: var(--dm-orange); border-color: var(--dm-orange); color: #fff; }
+[data-testid="stChatInputSubmitButton"] { color: var(--dm-orange); }
