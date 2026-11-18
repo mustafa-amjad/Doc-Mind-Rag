@@ -852,7 +852,8 @@ if spoken is not None:
                 st.error(friendly_error(error), icon=":material/error:")
                 st.stop()
     if not transcript:
-        st.toast("I didn't catch that. Try again, a little closer to the mic.", icon=":material/mic_off:")
+        st.toast("I didn't hear a question. Check that the right microphone is on, then speak a little closer.",
+                 icon=":material/mic_off:")
 
 # ----- new files: from the + in the message box, or the upload and link boxes in the Documents panel -----
 attached = list(submitted.files) if submitted and getattr(submitted, "files", None) else []

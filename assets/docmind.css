@@ -85,8 +85,8 @@
 
 /* ---------- narrower screens: side-by-side panels stack ---------- */
 @media (max-width: 1180px) {
-  .st-key-workspace > [data-testid="stHorizontalBlock"] { flex-wrap: wrap; row-gap: 16px; }
-  .st-key-workspace > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] { flex: 1 1 100% !important; width: 100% !important; min-width: 100% !important; }
+  .st-key-workspace > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] { flex-wrap: wrap; row-gap: 16px; }
+  .st-key-workspace > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] { flex: 1 1 100% !important; width: 100% !important; min-width: 100% !important; }
   .st-key-docs_panel { position: static; }
 }
 
@@ -155,3 +155,12 @@ div[role="dialog"]:not([data-testid="stPopoverBody"]) { animation: dm-pop 0.2s v
 [class*="st-key-cite_"] [data-testid="stBaseButton-secondary"] { background: var(--dm-orange-soft); border-color: #f6cfb6; color: var(--dm-orange-dark); }
 [class*="st-key-cite_"] [data-testid="stBaseButton-secondary"]:hover:not(:disabled) { background: var(--dm-orange); border-color: var(--dm-orange); color: #fff; }
 [data-testid="stChatInputSubmitButton"] { color: var(--dm-orange); }
+
+/* only the conversation scrolls: the Documents column stays pinned (and scrolls inside itself if it is long) */
+.st-key-workspace > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] { align-items: flex-start; }
+.st-key-workspace > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child {
+  position: sticky; top: 91px; align-self: flex-start; max-height: calc(100vh - 260px); overflow-y: auto; scrollbar-width: thin; }
+.st-key-workspace > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child .st-key-docs_panel { position: static; }
+@media (max-width: 1180px) {
+  .st-key-workspace > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child { position: static; max-height: none; }
+}
